@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Afrae Décor — Pièces artisanales en gypse</title>
+  <meta name="description" content="Boutique en ligne de pièces décoratives artisanales en gypse. Chaque création est unique, faite à la main au Maroc.">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+</head>
+<body>
+
+<!-- NAVBAR -->
+<header id="navbar">
+  <div class="container nav-inner">
+    <a href="/" class="nav-logo" onclick="event.preventDefault(); navigate('/')">Afrae Décor</a>
+
+    <ul class="nav-links">
+      <li><a href="/"                  onclick="event.preventDefault(); navigate('/')">Accueil</a></li>
+      <li><a href="/boutique"          onclick="event.preventDefault(); navigate('/boutique')">Boutique</a></li>
+      <li><a href="/comment-commander" onclick="event.preventDefault(); navigate('/comment-commander')">Comment commander</a></li>
+      <li><a href="/livraison"         onclick="event.preventDefault(); navigate('/livraison')">Livraison</a></li>
+      <li><a href="/contact"           onclick="event.preventDefault(); navigate('/contact')">Contact</a></li>
+      <li><a href="/faq"               onclick="event.preventDefault(); navigate('/faq')">FAQ</a></li>
+      <!-- Favoris & Langue injectés par JS -->
+    </ul>
+
+    <div class="nav-right">
+      <!-- Bouton langue injecté par JS -->
+      <button class="cart-btn" onclick="navigate('/panier')" aria-label="Panier">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <path d="M16 10a4 4 0 01-8 0"/>
+        </svg>
+        <span class="cart-count" id="cart-count" aria-label="Articles dans le panier">0</span>
+      </button>
+      <button class="hamburger" id="hamburger-btn" onclick="toggleMobileMenu()" aria-label="Menu" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="6"  x2="21" y2="6"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu -->
+  <nav class="mobile-menu" id="mobile-menu" aria-label="Menu mobile">
+    <a href="/"                  onclick="event.preventDefault(); navigate('/')">Accueil</a>
+    <a href="/boutique"          onclick="event.preventDefault(); navigate('/boutique')">Boutique</a>
+    <a href="/comment-commander" onclick="event.preventDefault(); navigate('/comment-commander')">Comment commander</a>
+    <a href="/livraison"         onclick="event.preventDefault(); navigate('/livraison')">Livraison</a>
+    <a href="/contact"           onclick="event.preventDefault(); navigate('/contact')">Contact</a>
+    <a href="/faq"               onclick="event.preventDefault(); navigate('/faq')">FAQ</a>
+    <!-- Favoris injecté par JS -->
+  </nav>
+</header>
+
+<!-- MAIN CONTENT -->
+<main id="main-content"></main>
+
+<!-- FOOTER — contenu injecté par JS (renderFooter) -->
+<footer></footer>
+
+<!-- TOAST -->
+<div id="toast-container" role="region" aria-live="polite" aria-label="Notifications"></div>
+
+<!-- SCRIPTS — translations avant app -->
+<script src="js/translations.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

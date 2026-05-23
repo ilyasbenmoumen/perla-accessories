@@ -1,0 +1,14 @@
+{
+  "rewrites": [
+    { "source": "/admin", "destination": "/admin/index.html" },
+    { "source": "/admin/", "destination": "/admin/index.html" },
+    { "source": "/boutique", "destination": "/index.html" },
+    { "source": "/panier", "destination": "/index.html" },
+    { "source": "/commander", "destination": "/index.html" },
+    { "source": "/produit/:id", "destination": "/index.html" },
+    { "source": "/comment-commander", "destination": "/index.html" },
+    { "source": "/livraison", "destination": "/index.html" },
+    { "source": "/contact", "destination": "/index.html" },
+    { "source": "/faq", "destination": "/index.html" }
+  ]
+}
