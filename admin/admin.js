@@ -5,13 +5,13 @@
 
 // ===== MÊME CONFIG FIREBASE QUE app.js =====
 const firebaseConfig = {
-    apiKey: "AIzaSyDUI_nyb_UiEKg-vYmgt-NhjloprrdhmGM",
-    authDomain: "perla-accessories.firebaseapp.com",
-    projectId: "perla-accessories",
-    storageBucket: "perla-accessories.firebasestorage.app",
-    messagingSenderId: "79521737952",
-    appId: "1:79521737952:web:d1f499fbf797806a03f485"
-  };
+  apiKey: "AIzaSyDUI_nyb_UiEKg-vYmgt-NhjloprrdhmGM",
+  authDomain: "perla-accessories.firebaseapp.com",
+  projectId: "perla-accessories",
+  storageBucket: "perla-accessories.firebasestorage.app",
+  messagingSenderId: "79521737952",
+  appId: "1:79521737952:web:d1f499fbf797806a03f485"
+};
 
 const ADMIN_PASSWORD = "perla2024"; // ⚠️ Changez ce mot de passe !
 const AUTH_KEY       = 'perla_admin_auth';
