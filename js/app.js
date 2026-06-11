@@ -7,13 +7,13 @@
 // ⚠️ IMPORTANT : Remplacez ces valeurs par votre propre config Firebase
 // Allez sur https://console.firebase.google.com/ → votre projet → Paramètres → Config web
 const firebaseConfig = {
-    apiKey: "AIzaSyDUI_nyb_UiEKg-vYmgt-NhjloprrdhmGM",
-    authDomain: "perla-accessories.firebaseapp.com",
-    projectId: "perla-accessories",
-    storageBucket: "perla-accessories.firebasestorage.app",
-    messagingSenderId: "79521737952",
-    appId: "1:79521737952:web:d1f499fbf797806a03f485"
-  };
+  apiKey: "AIzaSyDUI_nyb_UiEKg-vYmgt-NhjloprrdhmGM",
+  authDomain: "perla-accessories.firebaseapp.com",
+  projectId: "perla-accessories",
+  storageBucket: "perla-accessories.firebasestorage.app",
+  messagingSenderId: "79521737952",
+  appId: "1:79521737952:web:d1f499fbf797806a03f485"
+};
 
 // ===== FIREBASE INIT (SDK compat) =====
 let db = null;
