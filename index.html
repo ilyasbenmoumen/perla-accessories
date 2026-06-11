@@ -3,17 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Afrae Décor — Pièces artisanales en gypse</title>
-  <meta name="description" content="Boutique en ligne de pièces décoratives artisanales en gypse. Chaque création est unique, faite à la main au Maroc.">
+  <title>Perla Accessories — لمسة أناقة</title>
+  <meta name="description" content="Boutique en ligne de bijoux et accessoires élégants. Perla Accessories — لمسة أناقة">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Montserrat:wght@300;400;500;600&family=Noto+Naskh+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="icon" type="image/png" href="/assets/logo.png">
 </head>
 <body>
 
 <!-- NAVBAR -->
 <header id="navbar">
   <div class="container nav-inner">
-    <a href="/" class="nav-logo" onclick="event.preventDefault(); navigate('/')">Afrae Décor</a>
+    <a href="/" class="nav-logo" onclick="event.preventDefault(); navigate('/')">
+      <img src="/assets/logo.png" alt="Perla Accessories" class="nav-logo-img">
+      <span class="nav-logo-text">Perla <span class="nav-logo-arabic">لمسة أناقة</span></span>
+    </a>
 
     <ul class="nav-links">
       <li><a href="/"                  onclick="event.preventDefault(); navigate('/')">Accueil</a></li>
@@ -21,55 +27,40 @@
       <li><a href="/comment-commander" onclick="event.preventDefault(); navigate('/comment-commander')">Comment commander</a></li>
       <li><a href="/livraison"         onclick="event.preventDefault(); navigate('/livraison')">Livraison</a></li>
       <li><a href="/contact"           onclick="event.preventDefault(); navigate('/contact')">Contact</a></li>
-      <li><a href="/faq"               onclick="event.preventDefault(); navigate('/faq')">FAQ</a></li>
-      <!-- Favoris & Langue injectés par JS au DOMContentLoaded -->
     </ul>
 
     <div class="nav-right">
-      <!-- Bouton langue injecté par JS -->
+      <button class="fav-nav-btn" onclick="navigate('/favoris')" aria-label="Favoris">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+        <span class="fav-nav-count" id="fav-count"></span>
+      </button>
       <button class="cart-btn" onclick="navigate('/panier')" aria-label="Panier">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
-          <line x1="3" y1="6" x2="21" y2="6"/>
-          <path d="M16 10a4 4 0 01-8 0"/>
-        </svg>
-        <span class="cart-count" id="cart-count" aria-label="Articles dans le panier">0</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+        <span class="cart-count" id="cart-count">0</span>
       </button>
       <button class="hamburger" id="hamburger-btn" onclick="toggleMobileMenu()" aria-label="Menu" aria-expanded="false">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <line x1="3" y1="12" x2="21" y2="12"/>
-          <line x1="3" y1="6"  x2="21" y2="6"/>
-          <line x1="3" y1="18" x2="21" y2="18"/>
-        </svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
     </div>
   </div>
 
-  <!-- Menu mobile -->
-  <nav class="mobile-menu" id="mobile-menu" aria-label="Menu mobile">
-    <a href="/"                  onclick="event.preventDefault(); navigate('/')">Accueil</a>
-    <a href="/boutique"          onclick="event.preventDefault(); navigate('/boutique')">Boutique</a>
-    <a href="/comment-commander" onclick="event.preventDefault(); navigate('/comment-commander')">Comment commander</a>
-    <a href="/livraison"         onclick="event.preventDefault(); navigate('/livraison')">Livraison</a>
-    <a href="/contact"           onclick="event.preventDefault(); navigate('/contact')">Contact</a>
-    <a href="/faq"               onclick="event.preventDefault(); navigate('/faq')">FAQ</a>
-    <!-- Favoris injecté par JS -->
+  <nav class="mobile-menu" id="mobile-menu">
+    <a href="/"                  onclick="event.preventDefault(); navigate('/'); closeMobileMenu()">Accueil</a>
+    <a href="/boutique"          onclick="event.preventDefault(); navigate('/boutique'); closeMobileMenu()">Boutique</a>
+    <a href="/comment-commander" onclick="event.preventDefault(); navigate('/comment-commander'); closeMobileMenu()">Comment commander</a>
+    <a href="/livraison"         onclick="event.preventDefault(); navigate('/livraison'); closeMobileMenu()">Livraison</a>
+    <a href="/contact"           onclick="event.preventDefault(); navigate('/contact'); closeMobileMenu()">Contact</a>
+    <a href="/favoris"           onclick="event.preventDefault(); navigate('/favoris'); closeMobileMenu()">❤️ Favoris</a>
   </nav>
 </header>
 
-<!-- CONTENU PRINCIPAL -->
 <main id="main-content"></main>
 
-<!-- FOOTER — entièrement injecté par renderFooter() dans app.js -->
-<footer></footer>
+<footer id="main-footer"></footer>
 
-<!-- TOAST NOTIFICATIONS -->
-<div id="toast-container" role="region" aria-live="polite" aria-label="Notifications"></div>
+<div id="toast-container" role="region" aria-live="polite"></div>
 
-<!-- SCRIPTS — ordre IMPORTANT -->
-<script src="js/db.js"></script>           <!-- 1. Base de données partagée (commandes tous appareils) -->
-<script src="js/translations.js"></script> <!-- 2. Traductions FR/EN/AR -->
-<script src="js/app.js"></script>          <!-- 3. Logique principale -->
+<script src="js/app.js"></script>
 
 </body>
 </html>

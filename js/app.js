@@ -1,360 +1,280 @@
 // ============================================================
-// app.js — Afrae Décor
-// Toutes les nouvelles fonctionnalités + fix commandes partagées
-// Dépend de : db.js  translations.js
+// Perla Accessories — app.js
+// Cloud sync via Firebase Firestore (orders cross-device)
 // ============================================================
 
-// ===== STORAGE KEYS =====
-const STORAGE_KEY   = 'afrae_cart';
-const PRODUCTS_KEY  = 'afrae_products';
-const FAVORITES_KEY = 'afrae_favorites';
-const LANG_KEY      = 'afrae_lang';
+// ===== FIREBASE CONFIG =====
+// ⚠️ IMPORTANT : Remplacez ces valeurs par votre propre config Firebase
+// Allez sur https://console.firebase.google.com/ → votre projet → Paramètres → Config web
+const firebaseConfig = {
+    apiKey: "AIzaSyDUI_nyb_UiEKg-vYmgt-NhjloprrdhmGM",
+    authDomain: "perla-accessories.firebaseapp.com",
+    projectId: "perla-accessories",
+    storageBucket: "perla-accessories.firebasestorage.app",
+    messagingSenderId: "79521737952",
+    appId: "1:79521737952:web:d1f499fbf797806a03f485"
+  };
 
-// ===== I18N =====
-var currentLang = localStorage.getItem(LANG_KEY) || 'fr';
+// ===== FIREBASE INIT (SDK compat) =====
+let db = null;
+let firebaseReady = false;
 
-function t(key) {
-  var tr = TRANSLATIONS[currentLang] || TRANSLATIONS['fr'];
-  return tr[key] || TRANSLATIONS['fr'][key] || key;
+function initFirebase() {
+  return new Promise((resolve) => {
+    const script1 = document.createElement('script');
+    script1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+    script1.onload = () => {
+      const script2 = document.createElement('script');
+      script2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
+      script2.onload = () => {
+        try {
+          if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+          db = firebase.firestore();
+          firebaseReady = true;
+          console.log('✅ Firebase connecté — commandes synchronisées sur tous les appareils');
+        } catch(e) {
+          console.warn('Firebase non configuré, mode local activé:', e.message);
+          firebaseReady = false;
+        }
+        resolve();
+      };
+      script2.onerror = () => { firebaseReady = false; resolve(); };
+      document.head.appendChild(script2);
+    };
+    script1.onerror = () => { firebaseReady = false; resolve(); };
+    document.head.appendChild(script1);
+  });
 }
-function setLang(lang) {
-  if (!TRANSLATIONS[lang]) return;
-  currentLang = lang;
-  localStorage.setItem(LANG_KEY, lang);
-  document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
-  document.documentElement.setAttribute('lang', lang);
-  render(window.location.pathname);
-  renderNavbarTexts();
-  renderFooter();
-  closeLangMenu();
-}
+
+// ===== STORAGE KEYS (local fallback) =====
+const CART_KEY      = 'perla_cart';
+const ORDERS_KEY    = 'perla_orders';
+const PRODUCTS_KEY  = 'perla_products';
+const FAVORITES_KEY = 'perla_favorites';
+const LANG_KEY      = 'perla_lang';
 
 // ===== PRODUCTS =====
-var DEFAULT_PRODUCTS = [
-  { id:'1', name:'Vase Arabesque',     price:280, category:'Vases',      tags:['new','recommended'],        description:"Un vase artisanal sculpté à la main en gypse pur, orné de motifs arabesques traditionnels. Chaque détail est réalisé avec une précision remarquable, faisant de cette pièce un objet d'art unique.",     image:'/assets/product-1.jpg', inStock:true,  stock:5 },
-  { id:'2', name:'Bougeoir Floral',    price:195, category:'Bougeoirs',  tags:['bestseller'],               description:"Bougeoir en gypse aux formes florales délicates. Idéal pour créer une atmosphère chaleureuse et raffinée dans votre intérieur. Dimensions : 12 cm de hauteur.",                                      image:'/assets/product-2.jpg', inStock:true,  stock:8 },
-  { id:'3', name:'Miroir Baroque',     price:450, category:'Miroirs',    tags:['bestseller','recommended'], description:"Cadre de miroir baroque sculpté en gypse blanc. Un chef-d'œuvre artisanal qui transforme n'importe quel mur en une véritable œuvre d'art. Dimensions : 60x80 cm.",                                   image:'/assets/product-3.jpg', inStock:true,  stock:3 },
-  { id:'4', name:'Plateau Géométrique',price:320, category:'Plateaux',   tags:['new','bestseller'],         description:"Plateau décoratif en gypse aux motifs géométriques inspirés de la tradition marocaine. Parfait pour présenter vos bijoux ou comme centre de table.",                                               image:'/assets/product-4.jpg', inStock:true,  stock:6 },
-  { id:'5', name:'Sculpture Murale',   price:580, category:'Sculptures', tags:['new'],                      description:"Sculpture murale en relief, travail artisanal minutieux représentant des motifs floraux et géométriques. Pièce unique, faite à la main par nos artisans.",                                          image:'/assets/product-1.jpg', inStock:true,  stock:2 },
-  { id:'6', name:'Coupe Décorative',   price:240, category:'Coupes',     tags:['recommended'],              description:"Coupe décorative en gypse blanc, aux lignes épurées et élégantes. Peut servir comme vide-poche ou simplement comme objet décoratif.",                                                               image:'/assets/product-2.jpg', inStock:false, stock:0 },
+const DEFAULT_PRODUCTS = [
+  { id:'1', name:'Collier Perle Royale',    price:320, category:'Colliers',  tags:['new','recommended'],        description:'Un collier élégant orné de perles nacrées, parfait pour toute occasion. Chaîne en plaqué or 18 carats.', image:'/assets/product-1.jpg', inStock:true,  stock:8  },
+  { id:'2', name:'Bracelet Dorée',          price:185, category:'Bracelets', tags:['bestseller'],               description:'Bracelet délicat en plaqué or avec des détails floraux raffinés. Longueur ajustable.', image:'/assets/product-2.jpg', inStock:true,  stock:12 },
+  { id:'3', name:'Boucles Baroque',         price:250, category:'Boucles',   tags:['bestseller','recommended'], description:'Boucles d\'oreilles baroques en plaqué or rosé avec des perles de culture. Design unique et raffiné.', image:'/assets/product-3.jpg', inStock:true,  stock:5  },
+  { id:'4', name:'Bague Fleur de Perle',    price:210, category:'Bagues',    tags:['new','bestseller'],         description:'Bague délicate en forme de fleur ornée d\'une perle centrale. Plaqué or 18 carats.', image:'/assets/product-4.jpg', inStock:true,  stock:7  },
+  { id:'5', name:'Parure Complète Perla',   price:680, category:'Parures',   tags:['new'],                      description:'Parure complète : collier, bracelet et boucles d\'oreilles assortis. Le cadeau parfait.', image:'/assets/product-1.jpg', inStock:true,  stock:3  },
+  { id:'6', name:'Broche Papillon',         price:150, category:'Broches',   tags:['recommended'],              description:'Broche papillon en métal doré, ornée de cristaux et de perles nacrées.', image:'/assets/product-2.jpg', inStock:false, stock:0  },
 ];
 
-var CATEGORIES = [
-  { key:'Vases',      icon:'🏺', color:'#d4a88a' },
-  { key:'Bougeoirs',  icon:'🕯️', color:'#b8987a' },
-  { key:'Miroirs',    icon:'🪞', color:'#c4a88c' },
-  { key:'Plateaux',   icon:'🫙', color:'#b87c5a' },
-  { key:'Sculptures', icon:'🗿', color:'#9a6445' },
-  { key:'Coupes',     icon:'🍶', color:'#d4b89a' },
-];
-
-var LANG_OPTIONS = [
-  { code:'fr', label:'Français', flag:'🇫🇷' },
-  { code:'en', label:'English',  flag:'🇬🇧' },
-  { code:'ar', label:'العربية',  flag:'🇲🇦' },
+const CATEGORIES = [
+  { key:'Colliers',  icon:'📿', label:'Colliers'  },
+  { key:'Bracelets', icon:'💛', label:'Bracelets' },
+  { key:'Boucles',   icon:'✨', label:'Boucles'   },
+  { key:'Bagues',    icon:'💍', label:'Bagues'    },
+  { key:'Parures',   icon:'👑', label:'Parures'   },
+  { key:'Broches',   icon:'🌸', label:'Broches'   },
 ];
 
 function getProducts() {
-  try { var s = localStorage.getItem(PRODUCTS_KEY); return s ? JSON.parse(s) : DEFAULT_PRODUCTS; }
+  try { const s = localStorage.getItem(PRODUCTS_KEY); return s ? JSON.parse(s) : DEFAULT_PRODUCTS; }
   catch { return DEFAULT_PRODUCTS; }
 }
 function saveProducts(products) { localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products)); }
 
-// ===== CART =====
-function getCart() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; } }
-function saveCart(cart) { localStorage.setItem(STORAGE_KEY, JSON.stringify(cart)); updateCartUI(); }
+// ===== CART (localStorage) =====
+function getCart()     { try { return JSON.parse(localStorage.getItem(CART_KEY) || '[]'); } catch { return []; } }
+function saveCart(cart){ localStorage.setItem(CART_KEY, JSON.stringify(cart)); updateCartUI(); }
 function addToCart(product) {
-  var cart = getCart(); var ex = cart.find(function(i){ return i.id === product.id; });
+  const cart = getCart();
+  const ex = cart.find(i => i.id === product.id);
   if (ex) ex.quantity += 1;
   else cart.push({ id:product.id, name:product.name, price:product.price, image:product.image, quantity:1 });
-  saveCart(cart); showToast(product.name + ' ajouté au panier', 'success');
+  saveCart(cart);
+  showToast('✨ ' + product.name + ' ajouté au panier', 'success');
 }
-function removeFromCart(id) { saveCart(getCart().filter(function(i){ return i.id !== id; })); }
+function removeFromCart(id) { saveCart(getCart().filter(i => i.id !== id)); }
 function updateQty(id, qty) {
   if (qty <= 0) return removeFromCart(id);
-  var cart = getCart(); var item = cart.find(function(i){ return i.id === id; });
+  const cart = getCart(); const item = cart.find(i => i.id === id);
   if (item) { item.quantity = qty; saveCart(cart); }
 }
-function clearCart() { saveCart([]); }
-function getCartTotal() { return getCart().reduce(function(s,i){ return s + i.price * i.quantity; }, 0); }
-function getCartCount() { return getCart().reduce(function(s,i){ return s + i.quantity; }, 0); }
+function clearCart()     { saveCart([]); }
+function getCartTotal()  { return getCart().reduce((s,i) => s + i.price * i.quantity, 0); }
+function getCartCount()  { return getCart().reduce((s,i) => s + i.quantity, 0); }
 function updateCartUI() {
-  var count = getCartCount(); var el = document.getElementById('cart-count');
-  if (!el) return; el.textContent = count; el.classList.toggle('visible', count > 0);
+  const count = getCartCount();
+  const el = document.getElementById('cart-count');
+  if (!el) return;
+  el.textContent = count;
+  el.classList.toggle('visible', count > 0);
 }
 
-// ===== FAVORITES =====
-function getFavorites() { try { return JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]'); } catch { return []; } }
-function isFavorite(id) { return getFavorites().indexOf(id) !== -1; }
+// ===== FAVORITES (localStorage) =====
+function getFavorites()   { try { return JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]'); } catch { return []; } }
+function isFavorite(id)   { return getFavorites().includes(id); }
 function toggleFavorite(id, event) {
   if (event) event.stopPropagation();
-  var favs = getFavorites(); var idx = favs.indexOf(id);
-  if (idx === -1) { favs.push(id); showToast('Ajouté aux favoris ❤️', 'success'); }
-  else            { favs.splice(idx, 1); showToast('Retiré des favoris', ''); }
+  const favs = getFavorites(); const idx = favs.indexOf(id);
+  if (idx === -1) { favs.push(id); showToast('❤️ Ajouté aux favoris', 'success'); }
+  else            { favs.splice(idx,1); showToast('Retiré des favoris', ''); }
   localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
-  updateFavIcons(id); updateFavBadge();
+  updateFavIcons(id);
+  updateFavBadge();
 }
 function updateFavIcons(id) {
-  document.querySelectorAll('.fav-btn[data-id="' + id + '"], .fav-btn-lg[data-id="' + id + '"]').forEach(function(btn) {
-    var filled = isFavorite(id);
-    btn.classList.toggle('active', filled);
-    btn.setAttribute('aria-label', filled ? t('fav_remove') : t('fav_add'));
-    btn.innerHTML = heartIcon(filled);
+  document.querySelectorAll('[data-fav-id="' + id + '"]').forEach(btn => {
+    btn.classList.toggle('active', isFavorite(id));
+    btn.innerHTML = heartIcon(isFavorite(id));
   });
   if (window.location.pathname === '/favoris') render('/favoris');
 }
 function updateFavBadge() {
-  var count = getFavorites().length;
-  document.querySelectorAll('.fav-nav-count').forEach(function(el) {
+  const count = getFavorites().length;
+  document.querySelectorAll('#fav-count').forEach(el => {
     el.textContent = count > 0 ? count : '';
     el.classList.toggle('visible', count > 0);
   });
 }
 function heartIcon(filled) {
   return filled
-    ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>'
-    : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>';
+    ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>'
+    : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>';
+}
+
+// ===== ORDERS — FIREBASE CLOUD + LOCAL FALLBACK =====
+// Toutes les commandes sont sauvegardées sur Firebase Firestore
+// → visibles sur TOUS les appareils dans le panneau admin
+// En cas d'erreur Firebase, fallback vers localStorage
+
+async function saveOrderCloud(orderData) {
+  const order = {
+    id: 'ORD-' + Date.now(),
+    createdAt: new Date().toISOString(),
+    deliveryStatus: 'en_attente',
+    paymentStatus:  'non_payee',
+    ...orderData
+  };
+
+  if (firebaseReady && db) {
+    try {
+      await db.collection('orders').doc(order.id).set(order);
+      console.log('✅ Commande sauvegardée dans le cloud:', order.id);
+    } catch(e) {
+      console.warn('Erreur Firebase, sauvegarde locale:', e);
+      saveOrderLocal(order);
+    }
+  } else {
+    saveOrderLocal(order);
+  }
+  return order;
+}
+
+function saveOrderLocal(order) {
+  const orders = getLocalOrders();
+  orders.unshift(order);
+  localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+}
+
+function getLocalOrders() {
+  try { return JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]'); }
+  catch { return []; }
+}
+
+async function getOrdersForAdmin() {
+  if (firebaseReady && db) {
+    try {
+      const snapshot = await db.collection('orders').orderBy('createdAt','desc').limit(200).get();
+      return snapshot.docs.map(doc => doc.data());
+    } catch(e) {
+      console.warn('Erreur lecture Firebase:', e);
+      return getLocalOrders();
+    }
+  }
+  return getLocalOrders();
+}
+
+async function updateOrderCloud(id, updates) {
+  if (firebaseReady && db) {
+    try {
+      await db.collection('orders').doc(id).update(updates);
+    } catch(e) {
+      console.warn('Erreur mise à jour Firebase:', e);
+    }
+  }
+  // Also update local
+  const orders = getLocalOrders();
+  const idx = orders.findIndex(o => o.id === id);
+  if (idx !== -1) { orders[idx] = {...orders[idx], ...updates}; localStorage.setItem(ORDERS_KEY, JSON.stringify(orders)); }
+}
+
+async function deleteOrderCloud(id) {
+  if (firebaseReady && db) {
+    try {
+      await db.collection('orders').doc(id).delete();
+    } catch(e) {
+      console.warn('Erreur suppression Firebase:', e);
+    }
+  }
+  localStorage.setItem(ORDERS_KEY, JSON.stringify(getLocalOrders().filter(o => o.id !== id)));
 }
 
 // ===== NEWSLETTER =====
-// handleNewsletterSubmit est async car utilise dbSubscribeNewsletter (db.js)
-async function handleNewsletterSubmit(inputId, msgId) {
-  var input = document.getElementById(inputId); var msgEl = document.getElementById(msgId);
+function subscribeNewsletter(email) {
+  const emails = JSON.parse(localStorage.getItem('perla_nl') || '[]');
+  if (emails.includes(email)) return 'already';
+  emails.push(email);
+  localStorage.setItem('perla_nl', JSON.stringify(emails));
+  if (firebaseReady && db) {
+    db.collection('newsletter').add({ email, createdAt: new Date().toISOString() }).catch(() => {});
+  }
+  return 'ok';
+}
+function handleNewsletterSubmit(inputId, msgId) {
+  const input = document.getElementById(inputId), msgEl = document.getElementById(msgId);
   if (!input || !msgEl) return;
-  var email = input.value.trim();
-  if (!email)                                       { msgEl.textContent = t('newsletter_error_empty');   msgEl.className = 'nl-msg error'; return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))   { msgEl.textContent = t('newsletter_error_invalid'); msgEl.className = 'nl-msg error'; return; }
-  msgEl.textContent = '…'; msgEl.className = 'nl-msg';
-  var result = await dbSubscribeNewsletter(email);
-  if (result === 'already') { msgEl.textContent = t('newsletter_already');  msgEl.className = 'nl-msg info'; }
-  else                      { msgEl.textContent = t('newsletter_success');   msgEl.className = 'nl-msg success'; input.value = ''; }
+  const email = input.value.trim();
+  if (!email) { msgEl.textContent = 'Entrez votre email'; msgEl.className = 'nl-msg error'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msgEl.textContent = 'Email invalide'; msgEl.className = 'nl-msg error'; return; }
+  const res = subscribeNewsletter(email);
+  if (res === 'already') { msgEl.textContent = 'Déjà inscrit(e) !'; msgEl.className = 'nl-msg info'; }
+  else { msgEl.textContent = '✨ Merci pour votre inscription !'; msgEl.className = 'nl-msg success'; input.value = ''; }
 }
 
 // ===== TOAST =====
-function showToast(msg, type) {
-  if (!type) type = '';
-  var c = document.getElementById('toast-container'); if (!c) return;
-  var toast = document.createElement('div'); toast.className = 'toast ' + type;
-  var ic = { success:'✓', error:'✕', '':'ℹ' };
+function showToast(msg, type='') {
+  const c = document.getElementById('toast-container'); if (!c) return;
+  const toast = document.createElement('div'); toast.className = 'toast ' + type;
+  const ic = { success:'✓', error:'✕', '':'ℹ' };
   toast.innerHTML = '<span>' + (ic[type] || 'ℹ') + '</span> ' + msg;
   c.appendChild(toast);
-  setTimeout(function(){ toast.classList.add('fade-out'); setTimeout(function(){ toast.remove(); }, 300); }, 3000);
+  setTimeout(() => { toast.classList.add('fade-out'); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
-// ===== ICONS =====
-var icons = {
-  shoppingBag: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>',
-  arrowRight:  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>',
-  arrowLeft:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>',
-  trash:       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>',
-  check:       '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
-  phone:       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.67A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>',
-  mail:        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
-  mapPin:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
-  globe:       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>',
-  heart:       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>',
-  pkg:         '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
-  clock:       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
-  shield:      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-  alert:       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-  menu:        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
-  x:           '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
-  instagram:   '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>',
-  facebook:    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg>',
-  tiktok:      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 12a4 4 0 104 4V4a5 5 0 005 5"/></svg>',
-  whatsapp:    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>',
+// ===== SVG ICONS =====
+const icons = {
+  arrowRight: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>',
+  arrowLeft:  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>',
+  bag:        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>',
+  trash:      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>',
+  check:      '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
+  phone:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.67A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>',
+  mail:       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+  pin:        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+  pkg:        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+  clock:      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+  shield:     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+  alert:      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  instagram:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>',
+  facebook:   '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg>',
+  whatsapp:   '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>',
+  tiktok:     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12a4 4 0 104 4V4a5 5 0 005 5"/></svg>',
+  cloud:      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg>',
+  menu:       '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>',
+  xIcon:      '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
 };
 
-// ===== SLIDER =====
+// ===== SLIDER STATE =====
 var sliderIntervals = {};
 
-function sliderHTML(id, title, products) {
-  if (!products.length) return '';
-  var slides = products.map(function(p, i) {
-    var fav = isFavorite(p.id);
-    return '<div class="slide ' + (i===0?'active':'') + '" role="group" aria-label="' + (i+1) + ' sur ' + products.length + '">' +
-      '<div class="slide-img-wrap" onclick="navigate(\'/produit/' + p.id + '\')">' +
-        '<img src="' + p.image + '" alt="' + p.name + '" loading="lazy">' +
-        '<button class="fav-btn ' + (fav?'active':'') + '" data-id="' + p.id + '" onclick="toggleFavorite(\'' + p.id + '\',event)" aria-label="' + (fav?t('fav_remove'):t('fav_add')) + '">' + heartIcon(fav) + '</button>' +
-      '</div>' +
-      '<div class="slide-body">' +
-        '<div class="slide-cat">' + p.category + '</div>' +
-        '<div class="slide-name" onclick="navigate(\'/produit/' + p.id + '\')">' + p.name + '</div>' +
-        '<div class="slide-price">' + p.price + ' MAD</div>' +
-        '<button class="btn btn-primary btn-sm" onclick="navigate(\'/produit/' + p.id + '\')">' + t('view_product') + ' ' + icons.arrowRight + '</button>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-  var dots = products.map(function(_, i) {
-    return '<button class="slider-dot ' + (i===0?'active':'') + '" onclick="goToSlide(\'' + id + '\',' + i + ')" aria-label="Slide ' + (i+1) + '"></button>';
-  }).join('');
-  return '<div class="slider-block">' +
-    '<h3 class="slider-title">' + title + '</h3>' +
-    '<div class="slider" id="' + id + '" role="region" aria-label="' + title + '" data-current="0">' +
-      '<div class="slider-track" id="' + id + '-track">' + slides + '</div>' +
-      '<button class="slider-arrow slider-prev" onclick="prevSlide(\'' + id + '\')" aria-label="Slide précédent">&#8249;</button>' +
-      '<button class="slider-arrow slider-next" onclick="nextSlide(\'' + id + '\')" aria-label="Slide suivant">&#8250;</button>' +
-      '<div class="slider-dots">' + dots + '</div>' +
-    '</div>' +
-  '</div>';
-}
-
-function goToSlide(sid, index) {
-  var track = document.getElementById(sid + '-track'); var slider = document.getElementById(sid);
-  if (!track || !slider) return;
-  track.querySelectorAll('.slide').forEach(function(s,i){ s.classList.toggle('active', i===index); });
-  slider.querySelectorAll('.slider-dot').forEach(function(d,i){ d.classList.toggle('active', i===index); });
-  slider.dataset.current = index;
-}
-function nextSlide(sid) {
-  var track = document.getElementById(sid+'-track'); var slider = document.getElementById(sid); if (!track) return;
-  var count = track.querySelectorAll('.slide').length; var cur = parseInt(slider.dataset.current||'0',10);
-  goToSlide(sid, (cur + 1) % count);
-}
-function prevSlide(sid) {
-  var track = document.getElementById(sid+'-track'); var slider = document.getElementById(sid); if (!track) return;
-  var count = track.querySelectorAll('.slide').length; var cur = parseInt(slider.dataset.current||'0',10);
-  goToSlide(sid, (cur - 1 + count) % count);
-}
-function autoPlaySlider(sid, delay) {
-  if (!delay) delay = 4500;
-  if (sliderIntervals[sid]) clearInterval(sliderIntervals[sid]);
-  sliderIntervals[sid] = setInterval(function(){ nextSlide(sid); }, delay);
-}
-
-// ===== CATEGORIES =====
-function categoriesSectionHTML(currentFilter) {
-  return '<section class="section section-bg categories-section" aria-label="Catégories">' +
-    '<div class="container">' +
-      '<div class="section-header"><h2>' + t('categories_title') + '</h2><p>' + t('categories_sub') + '</p></div>' +
-      '<div class="categories-grid">' +
-        CATEGORIES.map(function(c) {
-          var label = t('cat_' + c.key.toLowerCase()) || c.key;
-          var isActive = currentFilter === c.key;
-          return '<a href="/categorie/' + encodeURIComponent(c.key) + '" class="cat-card' + (isActive?' active':'') + '" onclick="event.preventDefault();navigate(\'/categorie/' + encodeURIComponent(c.key) + '\')" aria-label="' + label + '">' +
-            '<div class="cat-icon" style="background:' + c.color + '20;color:' + c.color + '"><span aria-hidden="true">' + c.icon + '</span></div>' +
-            '<span class="cat-name">' + label + '</span>' +
-          '</a>';
-        }).join('') +
-      '</div>' +
-    '</div>' +
-  '</section>';
-}
-
-// ===== NEWSLETTER SECTION =====
-function newsletterSectionHTML() {
-  return '<section class="newsletter-hero-section" aria-label="Newsletter">' +
-    '<div class="container"><div class="newsletter-hero-inner">' +
-      '<span class="newsletter-icon" aria-hidden="true">✉️</span>' +
-      '<h2>' + t('newsletter_title') + '</h2><p>' + t('newsletter_sub') + '</p>' +
-      '<div class="nl-input-group nl-hero">' +
-        '<input type="email" id="nl-email-home" placeholder="' + t('newsletter_placeholder') + '" aria-label="' + t('newsletter_placeholder') + '" onkeydown="if(event.key===\'Enter\') handleNewsletterSubmit(\'nl-email-home\',\'nl-msg-home\')">' +
-        '<button class="btn btn-primary" onclick="handleNewsletterSubmit(\'nl-email-home\',\'nl-msg-home\')">' + t('newsletter_btn') + '</button>' +
-      '</div>' +
-      '<p id="nl-msg-home" class="nl-msg" aria-live="polite"></p>' +
-    '</div></div>' +
-  '</section>';
-}
-
-// ===== LANG BTN =====
-function renderLangBtn() {
-  var current = LANG_OPTIONS.filter(function(l){ return l.code===currentLang; })[0] || LANG_OPTIONS[0];
-  return '<div class="lang-switcher" id="lang-switcher">' +
-    '<button class="lang-btn" onclick="toggleLangMenu()" aria-label="Changer la langue" aria-haspopup="true" aria-expanded="false">' +
-      icons.globe + '<span class="lang-label">' + current.flag + ' ' + current.code.toUpperCase() + '</span>' +
-      '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>' +
-    '</button>' +
-    '<div class="lang-dropdown" id="lang-dropdown" role="menu">' +
-      LANG_OPTIONS.map(function(l){
-        return '<button class="lang-option' + (l.code===currentLang?' active':'') + '" onclick="setLang(\'' + l.code + '\')" role="menuitem"><span>' + l.flag + '</span> ' + l.label + '</button>';
-      }).join('') +
-    '</div></div>';
-}
-function toggleLangMenu() {
-  var dd = document.getElementById('lang-dropdown'); var btn = document.querySelector('.lang-btn');
-  if (!dd) return; var open = dd.classList.toggle('open'); if (btn) btn.setAttribute('aria-expanded', open);
-}
-function closeLangMenu() {
-  var dd = document.getElementById('lang-dropdown'); if (dd) dd.classList.remove('open');
-  var btn = document.querySelector('.lang-btn'); if (btn) btn.setAttribute('aria-expanded','false');
-}
-document.addEventListener('click', function(e){ if (!e.target.closest('#lang-switcher')) closeLangMenu(); });
-
-// ===== FOOTER =====
-function renderFooter() {
-  var footer = document.querySelector('footer'); if (!footer) return;
-  footer.innerHTML =
-    '<div class="newsletter-section">' +
-      '<div class="container"><div class="newsletter-inner">' +
-        '<div class="newsletter-text"><h3>' + t('newsletter_title') + '</h3><p>' + t('newsletter_sub') + '</p></div>' +
-        '<div class="newsletter-form">' +
-          '<div class="nl-input-group">' +
-            '<input type="email" id="nl-email-footer" placeholder="' + t('newsletter_placeholder') + '" aria-label="' + t('newsletter_placeholder') + '" onkeydown="if(event.key===\'Enter\') handleNewsletterSubmit(\'nl-email-footer\',\'nl-msg-footer\')">' +
-            '<button class="btn btn-primary" onclick="handleNewsletterSubmit(\'nl-email-footer\',\'nl-msg-footer\')">' + t('newsletter_btn') + '</button>' +
-          '</div>' +
-          '<p id="nl-msg-footer" class="nl-msg" aria-live="polite"></p>' +
-        '</div>' +
-      '</div></div>' +
-    '</div>' +
-    '<div class="footer-main"><div class="container footer-inner"><div class="footer-grid">' +
-      '<div class="footer-brand">' +
-        '<h3>Afrae Décor</h3><p>' + t('footer_brand_text') + '</p>' +
-        '<div class="footer-social">' +
-          '<a href="https://instagram.com" target="_blank" rel="noopener" aria-label="Instagram" class="social-icon">' + icons.instagram + '</a>' +
-          '<a href="https://facebook.com"  target="_blank" rel="noopener" aria-label="Facebook"  class="social-icon">' + icons.facebook  + '</a>' +
-          '<a href="https://tiktok.com"    target="_blank" rel="noopener" aria-label="TikTok"    class="social-icon">' + icons.tiktok    + '</a>' +
-          '<a href="https://wa.me/212600000000" target="_blank" rel="noopener" aria-label="WhatsApp" class="social-icon">' + icons.whatsapp + '</a>' +
-        '</div>' +
-      '</div>' +
-      '<div class="footer-col"><h4>' + t('footer_nav') + '</h4>' +
-        '<a href="/boutique"          onclick="event.preventDefault();navigate(\'/boutique\')">'          + t('nav_shop')     + '</a>' +
-        '<a href="/comment-commander" onclick="event.preventDefault();navigate(\'/comment-commander\')">' + t('nav_how')      + '</a>' +
-        '<a href="/livraison"         onclick="event.preventDefault();navigate(\'/livraison\')">'         + t('nav_delivery') + '</a>' +
-        '<a href="/faq"               onclick="event.preventDefault();navigate(\'/faq\')">'               + t('nav_faq')      + '</a>' +
-        '<a href="/contact"           onclick="event.preventDefault();navigate(\'/contact\')">'           + t('nav_contact')  + '</a>' +
-      '</div>' +
-      '<div class="footer-col"><h4>' + t('footer_contact_title') + '</h4>' +
-        '<div class="footer-contact-item">' + icons.mapPin + '<span>' + t('footer_address') + '</span></div>' +
-        '<div class="footer-contact-item">' + icons.phone  + '<a href="tel:+212600000000">' + t('footer_phone') + '</a></div>' +
-        '<div class="footer-contact-item">' + icons.mail   + '<a href="mailto:contact@afraedecor.ma">' + t('footer_email') + '</a></div>' +
-        '<div class="footer-payment-badge">' + t('footer_payment_text') + '<br><small>' + t('footer_payment_text2') + '</small></div>' +
-      '</div>' +
-      '<div class="footer-col footer-map-col"><h4>📍 Localisation</h4>' +
-        '<div class="footer-map"><iframe src="https://www.openstreetmap.org/export/embed.html?bbox=-8.05%2C31.6%2C-7.95%2C31.7&layer=mapnik&marker=31.6295%2C-7.9811" width="100%" height="160" frameborder="0" style="border-radius:10px;" title="Localisation" loading="lazy"></iframe></div>' +
-      '</div>' +
-    '</div><div class="footer-bottom">' + t('footer_rights').replace('{year}', new Date().getFullYear()) + '</div></div></div>';
-}
-
-// ===== NAVBAR TEXTS =====
-function renderNavbarTexts() {
-  var map = {'/':'nav_home','/boutique':'nav_shop','/comment-commander':'nav_how','/livraison':'nav_delivery','/contact':'nav_contact','/faq':'nav_faq','/favoris':'nav_favorites'};
-  document.querySelectorAll('.nav-links a').forEach(function(a) {
-    var key = map[a.getAttribute('href')];
-    if (key && !a.querySelector('svg')) a.textContent = t(key);
-  });
-  var lw = document.getElementById('lang-wrapper'); if (lw) lw.innerHTML = renderLangBtn();
-  updateFavBadge();
-}
-
-// ===== PRODUCT CARD =====
-function productCardHTML(p) {
-  var fav = isFavorite(p.id);
-  return '<div class="product-card" onclick="navigate(\'/produit/' + p.id + '\')" role="article" tabindex="0" onkeydown="if(event.key===\'Enter\')navigate(\'/produit/' + p.id + '\')">' +
-    '<div class="product-card-img">' +
-      '<img src="' + p.image + '" alt="' + p.name + '" loading="lazy">' +
-      '<button class="fav-btn ' + (fav?'active':'') + '" data-id="' + p.id + '" onclick="toggleFavorite(\'' + p.id + '\',event)" aria-label="' + (fav?t('fav_remove'):t('fav_add')) + '">' + heartIcon(fav) + '</button>' +
-    '</div>' +
-    '<div class="product-card-body">' +
-      '<div class="product-card-cat">' + p.category + '</div>' +
-      '<div class="product-card-name">' + p.name + '</div>' +
-      '<div class="product-card-price">' + p.price + ' MAD</div>' +
-      (!p.inStock ? '<div class="out-of-stock-badge">' + t('out_of_stock') + '</div>' : '') +
-    '</div>' +
-  '</div>';
-}
-
 // ===== ROUTER =====
-var routes = {
+const routes = {
   '/':                  renderHome,
   '/boutique':          renderShop,
   '/panier':            renderCart,
@@ -366,259 +286,521 @@ var routes = {
   '/favoris':           renderFavorites,
 };
 
-function navigate(path) {
+let currentProductId = null;
+
+function navigate(path, data) {
+  if (data) currentProductId = data;
   window.history.pushState({}, '', path);
-  render(path); window.scrollTo(0, 0); updateActiveNav(path); closeMobileMenu();
+  render(path);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  updateActiveNav(path);
+  closeMobileMenu();
 }
+
 function render(path) {
   if (!path) path = window.location.pathname;
-  Object.values(sliderIntervals).forEach(clearInterval); sliderIntervals = {};
-  var main = document.getElementById('main-content'); if (!main) return;
+  Object.values(sliderIntervals).forEach(clearInterval);
+  sliderIntervals = {};
+  const main = document.getElementById('main-content');
+  if (!main) return;
   if (path.startsWith('/produit/'))   { renderProductDetail(main, path.split('/produit/')[1]); return; }
   if (path.startsWith('/categorie/')) { renderShopFiltered(main, decodeURIComponent(path.split('/categorie/')[1])); return; }
-  var renderer = routes[path] || renderNotFound;
+  const renderer = routes[path] || renderNotFound;
   renderer(main);
 }
+
 function updateActiveNav(path) {
-  document.querySelectorAll('.nav-links a, .mobile-menu a').forEach(function(a){
+  document.querySelectorAll('.nav-links a, .mobile-menu a').forEach(a => {
     a.classList.toggle('active', a.getAttribute('href') === path);
   });
 }
-window.addEventListener('popstate', function(){ render(); });
 
-// ===== PAGE HOME =====
+window.addEventListener('popstate', () => render());
+
+// ===== PRODUCT CARD =====
+function productCardHTML(p) {
+  const fav = isFavorite(p.id);
+  const tags = (p.tags || []).map(t => {
+    if (t === 'new') return '<span class="tag-badge tag-new">Nouveau</span>';
+    if (t === 'bestseller') return '<span class="tag-badge tag-bestseller">Best seller</span>';
+    return '';
+  }).join('');
+  return '<div class="product-card" onclick="navigate(\'/produit/' + p.id + '\')" role="article" tabindex="0">' +
+    '<div class="product-card-img">' +
+      '<img src="' + p.image + '" alt="' + p.name + '" loading="lazy">' +
+      '<button class="fav-btn ' + (fav ? 'active' : '') + '" data-fav-id="' + p.id + '" onclick="toggleFavorite(\'' + p.id + '\',event)" aria-label="Favoris">' + heartIcon(fav) + '</button>' +
+    '</div>' +
+    '<div class="product-card-body">' +
+      '<div class="product-card-cat">' + p.category + '</div>' +
+      '<div class="product-card-name">' + p.name + '</div>' +
+      '<div class="product-card-price">' + p.price + ' MAD</div>' +
+      tags +
+      (!p.inStock ? '<div class="out-of-stock-badge">Rupture de stock</div>' : '') +
+    '</div>' +
+  '</div>';
+}
+
+// ===== SLIDER =====
+function sliderHTML(id, title, products) {
+  if (!products.length) return '';
+  const slides = products.map((p, i) => {
+    return '<div class="slide ' + (i === 0 ? 'active' : '') + '">' +
+      '<div class="slide-img-wrap" onclick="navigate(\'/produit/' + p.id + '\')">' +
+        '<img src="' + p.image + '" alt="' + p.name + '" loading="lazy">' +
+      '</div>' +
+      '<div class="slide-body">' +
+        '<div class="slide-cat">' + p.category + '</div>' +
+        '<div class="slide-name" onclick="navigate(\'/produit/' + p.id + '\')">' + p.name + '</div>' +
+        '<div class="slide-price">' + p.price + ' MAD</div>' +
+        '<button class="btn btn-primary btn-sm" onclick="navigate(\'/produit/' + p.id + '\')">Voir ' + icons.arrowRight + '</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  const dots = products.map((_, i) =>
+    '<button class="slider-dot ' + (i === 0 ? 'active' : '') + '" onclick="goToSlide(\'' + id + '\',' + i + ')"></button>'
+  ).join('');
+  return '<div class="slider-block">' +
+    '<h3 class="slider-title">' + title + '</h3>' +
+    '<div class="slider" id="' + id + '" data-current="0">' +
+      '<div class="slider-track" id="' + id + '-track">' + slides + '</div>' +
+      '<button class="slider-arrow slider-prev" onclick="prevSlide(\'' + id + '\')">&#8249;</button>' +
+      '<button class="slider-arrow slider-next" onclick="nextSlide(\'' + id + '\')">&#8250;</button>' +
+      '<div class="slider-dots">' + dots + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function goToSlide(id, index) {
+  const track = document.getElementById(id + '-track');
+  const slider = document.getElementById(id);
+  if (!track || !slider) return;
+  track.querySelectorAll('.slide').forEach((s, i) => s.classList.toggle('active', i === index));
+  slider.querySelectorAll('.slider-dot').forEach((d, i) => d.classList.toggle('active', i === index));
+  slider.dataset.current = index;
+}
+function nextSlide(id) {
+  const track = document.getElementById(id + '-track');
+  const slider = document.getElementById(id);
+  if (!track) return;
+  const count = track.querySelectorAll('.slide').length;
+  const current = parseInt(slider.dataset.current || '0', 10);
+  goToSlide(id, (current + 1) % count);
+}
+function prevSlide(id) {
+  const track = document.getElementById(id + '-track');
+  const slider = document.getElementById(id);
+  if (!track) return;
+  const count = track.querySelectorAll('.slide').length;
+  const current = parseInt(slider.dataset.current || '0', 10);
+  goToSlide(id, (current - 1 + count) % count);
+}
+function autoPlaySlider(id, delay = 4500) {
+  if (sliderIntervals[id]) clearInterval(sliderIntervals[id]);
+  sliderIntervals[id] = setInterval(() => nextSlide(id), delay);
+}
+
+// ===== CATEGORIES SECTION =====
+function categoriesSectionHTML(active) {
+  return '<section class="section section-bg" style="padding:48px 0">' +
+    '<div class="container">' +
+      '<div class="section-header"><span class="eyebrow">Collections</span><h2>Nos <em>Catégories</em></h2><div class="gold-divider"></div></div>' +
+      '<div class="categories-grid">' +
+        CATEGORIES.map(c =>
+          '<a href="/categorie/' + encodeURIComponent(c.key) + '" class="cat-card ' + (active === c.key ? 'active' : '') + '" onclick="event.preventDefault();navigate(\'/categorie/' + encodeURIComponent(c.key) + '\')">' +
+            '<div class="cat-icon"><span>' + c.icon + '</span></div>' +
+            '<span class="cat-name">' + c.label + '</span>' +
+          '</a>'
+        ).join('') +
+      '</div>' +
+    '</div>' +
+  '</section>';
+}
+
+// ===== HOME =====
 function renderHome(main) {
-  var products = getProducts();
-  var inStock  = products.filter(function(p){ return p.inStock; });
-  var newItems = products.filter(function(p){ return p.tags && p.tags.indexOf('new') !== -1; });
-  var best     = products.filter(function(p){ return p.tags && p.tags.indexOf('bestseller') !== -1; });
-  var reco     = products.filter(function(p){ return p.tags && p.tags.indexOf('recommended') !== -1; });
-  var featured = inStock.slice(0,4);
+  const products = getProducts();
+  const inStock  = products.filter(p => p.inStock);
+  const newP     = products.filter(p => (p.tags || []).includes('new'));
+  const best     = products.filter(p => (p.tags || []).includes('bestseller'));
+  const reco     = products.filter(p => (p.tags || []).includes('recommended'));
+  const featured = inStock.slice(0, 4);
 
   main.innerHTML =
-    '<section class="hero" aria-label="Bannière principale">' +
-      '<img src="/assets/hero-bg.jpg" alt="Afrae Décor" class="hero-bg">' +
+    // HERO
+    '<section class="hero">' +
+      '<img src="/assets/hero-bg.jpg" alt="Perla Accessories" class="hero-bg">' +
       '<div class="hero-overlay"></div>' +
       '<div class="hero-content">' +
-        '<h1>Afrae Décor</h1>' +
-        '<p>' + t('hero_subtitle').replace('\n','<br>') + '</p>' +
-        '<button class="btn btn-primary btn-lg" onclick="navigate(\'/boutique\')">' + t('hero_cta') + ' ' + icons.arrowRight + '</button>' +
+        '<p class="hero-eyebrow">لمسة أناقة</p>' +
+        '<h1>Perla <em>Accessories</em></h1>' +
+        '<div class="hero-divider"><span class="hero-divider-line"></span><span class="hero-divider-gem">♦</span><span class="hero-divider-line"></span></div>' +
+        '<p>Des bijoux d\'exception pour sublimer chaque instant.<br>Colliers, bracelets, bagues et parures dorés.</p>' +
+        '<button class="btn btn-primary btn-lg" onclick="navigate(\'/boutique\')">Découvrir la collection ' + icons.arrowRight + '</button>' +
+        '<div class="hero-badges"><span class="hero-badge">✨ Plaqué or 18k</span><span class="hero-badge">💎 Perles nacrées</span><span class="hero-badge">📦 Livraison Maroc</span></div>' +
       '</div>' +
     '</section>' +
-    '<section class="section slider-section" aria-label="Nouveautés et meilleures ventes">' +
-      '<div class="container"><div class="sliders-wrapper">' +
-        sliderHTML('slider-new',  t('slider_new'),         newItems.length ? newItems : inStock.slice(0,3)) +
-        sliderHTML('slider-best', t('slider_bestsellers'), best.length     ? best     : inStock.slice(1,4)) +
-        sliderHTML('slider-reco', t('slider_recommended'), reco.length     ? reco     : inStock.slice(0,3)) +
-      '</div></div>' +
-    '</section>' +
-    categoriesSectionHTML() +
-    '<section class="section" aria-label="Nos créations">' +
-      '<div class="container">' +
-        '<div class="section-header"><h2>' + t('home_creations_title') + '</h2><p>' + t('home_creations_sub') + '</p></div>' +
-        '<div class="products-grid">' + featured.map(productCardHTML).join('') + '</div>' +
-        '<div class="text-center" style="margin-top:44px"><button class="btn btn-outline btn-lg" onclick="navigate(\'/boutique\')">' + t('home_see_all') + '</button></div>' +
-      '</div>' +
-    '</section>' +
-    '<section class="section section-bg" aria-label="Comment commander">' +
-      '<div class="container">' +
-        '<div class="section-header"><h2>' + t('home_how_title') + '</h2></div>' +
-        '<div class="steps-grid">' +
-          '<div class="step-item"><div class="step-num">1</div><h3>' + t('home_step1_title') + '</h3><p>' + t('home_step1_text') + '</p></div>' +
-          '<div class="step-item"><div class="step-num">2</div><h3>' + t('home_step2_title') + '</h3><p>' + t('home_step2_text') + '</p></div>' +
-          '<div class="step-item"><div class="step-num">3</div><h3>' + t('home_step3_title') + '</h3><p>' + t('home_step3_text') + '</p></div>' +
-        '</div>' +
-      '</div>' +
-    '</section>' +
-    newsletterSectionHTML();
 
-  autoPlaySlider('slider-new',  4500);
-  autoPlaySlider('slider-best', 5000);
-  autoPlaySlider('slider-reco', 5500);
+    // TRUST BAR
+    '<div class="trust-bar">' +
+      '<div class="container trust-bar-inner">' +
+        '<div class="trust-item"><span class="trust-icon">💎</span><div class="trust-text"><strong>Qualité Premium</strong><span>Plaqué or 18 carats</span></div></div>' +
+        '<div class="trust-item"><span class="trust-icon">📦</span><div class="trust-text"><strong>Livraison Maroc</strong><span>3 à 5 jours ouvrables</span></div></div>' +
+        '<div class="trust-item"><span class="trust-icon">💰</span><div class="trust-text"><strong>Paiement livraison</strong><span>Espèces ou carte</span></div></div>' +
+        '<div class="trust-item"><span class="trust-icon">✨</span><div class="trust-text"><strong>100% Authentique</strong><span>Certifié Perla</span></div></div>' +
+      '</div>' +
+    '</div>' +
+
+    // SLIDERS
+    '<section class="section"><div class="container">' +
+      '<div class="section-header"><span class="eyebrow">Sélections</span><h2>Nos <em>Coups de Cœur</em></h2><div class="gold-divider"></div></div>' +
+      '<div class="sliders-wrapper">' +
+        sliderHTML('slider-new',  '✨ Nouveautés',   newP.length ? newP : inStock.slice(0,3)) +
+        sliderHTML('slider-best', '🏆 Best Sellers', best.length ? best : inStock.slice(1,4)) +
+        sliderHTML('slider-reco', '💛 Recommandés',  reco.length ? reco : inStock.slice(0,3)) +
+      '</div>' +
+    '</div></section>' +
+
+    // CATEGORIES
+    categoriesSectionHTML() +
+
+    // FEATURED PRODUCTS
+    '<section class="section"><div class="container">' +
+      '<div class="section-header"><span class="eyebrow">Nos Bijoux</span><h2>La <em>Collection</em></h2><div class="gold-divider"></div></div>' +
+      '<div class="products-grid">' + featured.map(productCardHTML).join('') + '</div>' +
+      '<div class="text-center" style="margin-top:44px"><button class="btn btn-outline btn-lg" onclick="navigate(\'/boutique\')">Voir toute la collection ' + icons.arrowRight + '</button></div>' +
+    '</div></section>' +
+
+    // HOW TO ORDER
+    '<section class="section section-rose"><div class="container">' +
+      '<div class="section-header"><span class="eyebrow">Simple & rapide</span><h2>Comment <em>Commander</em></h2><div class="gold-divider"></div></div>' +
+      '<div class="steps-grid">' +
+        '<div class="step-item"><div class="step-num">1</div><h3>Choisissez</h3><p>Parcourez notre collection et sélectionnez vos bijoux préférés.</p></div>' +
+        '<div class="step-item"><div class="step-num">2</div><h3>Commandez</h3><p>Remplissez le formulaire avec vos coordonnées de livraison.</p></div>' +
+        '<div class="step-item"><div class="step-num">3</div><h3>Recevez</h3><p>Livraison à domicile dans tout le Maroc. Payez à la réception.</p></div>' +
+      '</div>' +
+    '</div></section>' +
+
+    // NEWSLETTER
+    '<div class="newsletter-section"><div class="container">' +
+      '<div class="newsletter-inner">' +
+        '<div class="newsletter-text"><h3>Restez informée 💌</h3><p>Recevez nos nouvelles collections et offres exclusives</p></div>' +
+        '<div class="newsletter-form"><div class="nl-input-group"><input type="email" id="nl-email" placeholder="Votre email..."><button class="btn btn-primary" onclick="handleNewsletterSubmit(\'nl-email\',\'nl-msg\')">S\'inscrire</button></div><p id="nl-msg" class="nl-msg"></p></div>' +
+      '</div>' +
+    '</div></div>';
+
+  setTimeout(() => {
+    autoPlaySlider('slider-new',  4500);
+    autoPlaySlider('slider-best', 5000);
+    autoPlaySlider('slider-reco', 5500);
+  }, 100);
 }
 
-// ===== PAGE BOUTIQUE =====
+// ===== SHOP =====
 function renderShop(main) {
-  main.innerHTML = '<div class="container"><div class="page-header"><h1>' + t('shop_title') + '</h1><p>' + t('shop_sub') + '</p></div>' +
-    categoriesSectionHTML() +
-    '<div class="products-grid" style="margin-top:40px">' + getProducts().map(productCardHTML).join('') + '</div><div style="height:60px"></div></div>';
+  main.innerHTML =
+    '<div class="container">' +
+      '<div class="page-header"><h1>Notre <em style="font-style:italic;color:var(--gold-dark)">Boutique</em></h1><p>Tous nos bijoux et accessoires</p></div>' +
+      categoriesSectionHTML() +
+      '<div class="products-grid" style="margin-top:40px">' + getProducts().map(productCardHTML).join('') + '</div>' +
+      '<div style="height:60px"></div>' +
+    '</div>';
 }
 
-// ===== PAGE BOUTIQUE FILTRÉE =====
 function renderShopFiltered(main, category) {
-  var products = getProducts().filter(function(p){ return p.category === category; });
-  var catInfo = CATEGORIES.filter(function(c){ return c.key === category; })[0];
-  var catLabel = t('cat_' + category.toLowerCase()) || category;
-  main.innerHTML = '<div class="container"><div class="page-header"><div style="font-size:3rem;margin-bottom:8px" aria-hidden="true">' + (catInfo?catInfo.icon:'🏺') + '</div><h1>' + catLabel + '</h1><p>' + products.length + ' article' + (products.length>1?'s':'') + '</p></div>' +
-    categoriesSectionHTML(category) +
-    '<div class="products-grid" style="margin-top:40px">' + (products.length ? products.map(productCardHTML).join('') : '<p style="color:var(--muted);text-align:center;grid-column:1/-1">Aucun produit dans cette catégorie.</p>') + '</div><div style="height:60px"></div></div>';
-}
-
-// ===== PAGE FAVORIS =====
-function renderFavorites(main) {
-  var favIds = getFavorites(); var products = getProducts().filter(function(p){ return favIds.indexOf(p.id) !== -1; });
-  if (!products.length) {
-    main.innerHTML = '<div class="empty-state"><div style="font-size:4rem;margin-bottom:16px" aria-hidden="true">🤍</div><h2>' + t('favorites_empty_title') + '</h2><p>' + t('favorites_empty_text') + '</p><button class="btn btn-primary" onclick="navigate(\'/boutique\')">' + t('favorites_discover') + '</button></div>';
-    return;
-  }
-  main.innerHTML = '<div class="container"><div class="page-header"><h1>' + t('favorites_title') + '</h1><p>' + t('favorites_sub') + '</p></div><div class="products-grid">' + products.map(productCardHTML).join('') + '</div><div style="height:60px"></div></div>';
-}
-
-// ===== PAGE PRODUIT DETAIL =====
-function renderProductDetail(main, id) {
-  var p = getProducts().filter(function(x){ return x.id === id; })[0];
-  if (!p) { renderNotFound(main); return; }
-  var fav = isFavorite(p.id);
-  main.innerHTML = '<div class="container" style="padding-top:32px;padding-bottom:60px">' +
-    '<a href="#" class="back-link" onclick="event.preventDefault();navigate(\'/boutique\')">' + icons.arrowLeft + ' ' + t('back_shop') + '</a>' +
-    '<div class="product-detail-grid">' +
-      '<div class="product-detail-img"><img src="' + p.image + '" alt="' + p.name + '"></div>' +
-      '<div class="product-detail-info">' +
-        '<p class="product-cat">' + p.category + '</p>' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">' +
-          '<h1 class="product-title">' + p.name + '</h1>' +
-          '<button class="fav-btn-lg ' + (fav?'active':'') + '" data-id="' + p.id + '" onclick="toggleFavorite(\'' + p.id + '\',event)" aria-label="' + (fav?t('fav_remove'):t('fav_add')) + '">' + heartIcon(fav) + '</button>' +
-        '</div>' +
-        '<div class="product-price">' + p.price + ' MAD</div>' +
-        '<p class="product-desc">' + p.description + '</p>' +
-        '<div style="display:flex;flex-direction:column;gap:12px">' +
-          '<button class="btn btn-primary btn-lg" onclick="addToCart(' + JSON.stringify(p).replace(/"/g,'&quot;') + ')" ' + (!p.inStock?'disabled':'') + '>' + icons.shoppingBag + ' ' + (p.inStock?t('add_to_cart'):t('out_of_stock')) + '</button>' +
-          '<p style="font-size:0.78rem;color:var(--muted);text-align:center">' + t('payment_info') + '</p>' +
-        '</div>' +
-        '<div class="product-info-box"><div>🏺 Matière : Gypse artisanal</div><div>✨ Pièce unique</div><div>📦 Emballage soigné (produit fragile)</div><div>↩️ Pas de retour sauf casse à la livraison</div></div>' +
+  const products = getProducts().filter(p => p.category === category);
+  const catInfo  = CATEGORIES.find(c => c.key === category);
+  main.innerHTML =
+    '<div class="container">' +
+      '<div class="page-header">' +
+        '<div style="font-size:3rem;margin-bottom:8px">' + (catInfo ? catInfo.icon : '💍') + '</div>' +
+        '<h1>' + category + '</h1>' +
+        '<p>' + products.length + ' article' + (products.length !== 1 ? 's' : '') + '</p>' +
       '</div>' +
-    '</div></div>';
+      categoriesSectionHTML(category) +
+      '<div class="products-grid" style="margin-top:40px">' +
+        (products.length ? products.map(productCardHTML).join('') : '<p style="color:var(--muted);text-align:center;grid-column:1/-1">Aucun produit dans cette catégorie.</p>') +
+      '</div>' +
+      '<div style="height:60px"></div>' +
+    '</div>';
 }
 
-// ===== PAGE PANIER =====
-function renderCart(main) {
-  var cart = getCart();
-  if (!cart.length) {
-    main.innerHTML = '<div class="empty-state">' + icons.shoppingBag.replace('width="20"','width="52"').replace('height="20"','height="52"') + '<h2>Votre panier est vide</h2><p>Découvrez nos créations artisanales</p><button class="btn btn-primary" onclick="navigate(\'/boutique\')">Voir la boutique</button></div>';
+// ===== FAVORITES =====
+function renderFavorites(main) {
+  const favIds   = getFavorites();
+  const products = getProducts().filter(p => favIds.includes(p.id));
+  if (!products.length) {
+    main.innerHTML = '<div class="empty-state"><div style="font-size:4rem">🤍</div><h2>Aucun favori</h2><p>Ajoutez des bijoux à vos favoris en cliquant sur le cœur ❤️</p><button class="btn btn-primary" onclick="navigate(\'/boutique\')">Découvrir la boutique</button></div>';
     return;
   }
-  main.innerHTML = '<div class="container" style="padding-top:40px;padding-bottom:60px;max-width:820px">' +
-    '<h1 style="font-family:var(--font-heading);font-size:2rem;font-weight:300;margin-bottom:28px">Panier</h1>' +
-    '<div class="cart-items" id="cart-items"></div>' +
-    '<div class="cart-summary">' +
-      '<div class="cart-total"><span class="cart-total-label">Total</span><span class="cart-total-amount" id="cart-total">' + getCartTotal() + ' MAD</span></div>' +
-      '<button class="btn btn-primary btn-lg" style="width:100%" onclick="navigate(\'/commander\')">Passer la commande ' + icons.arrowRight + '</button>' +
-      '<p style="font-size:0.78rem;color:var(--muted);text-align:center;margin-top:10px">' + t('payment_info') + '</p>' +
-    '</div></div>';
+  main.innerHTML = '<div class="container"><div class="page-header"><h1>Mes <em style="font-style:italic;color:var(--gold-dark)">Favoris</em></h1><p>' + products.length + ' bijou' + (products.length > 1 ? 'x' : '') + ' sauvegardé' + (products.length > 1 ? 's' : '') + '</p></div><div class="products-grid">' + products.map(productCardHTML).join('') + '</div><div style="height:60px"></div></div>';
+}
+
+// ===== PRODUCT DETAIL =====
+function renderProductDetail(main, id) {
+  const p = getProducts().find(x => x.id === id);
+  if (!p) { renderNotFound(main); return; }
+  const fav = isFavorite(p.id);
+  main.innerHTML =
+    '<div class="container" style="padding-top:32px;padding-bottom:60px">' +
+      '<a href="#" class="back-link" onclick="event.preventDefault();navigate(\'/boutique\')">' + icons.arrowLeft + ' Retour à la boutique</a>' +
+      '<div class="product-detail-grid">' +
+        '<div class="product-detail-img"><img src="' + p.image + '" alt="' + p.name + '"></div>' +
+        '<div class="product-detail-info">' +
+          '<p class="product-cat">' + p.category + '</p>' +
+          '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">' +
+            '<h1 class="product-title">' + p.name + '</h1>' +
+            '<button class="fav-btn-lg ' + (fav ? 'active' : '') + '" data-fav-id="' + p.id + '" onclick="toggleFavorite(\'' + p.id + '\',event)">' + heartIcon(fav) + '</button>' +
+          '</div>' +
+          '<div class="product-price">' + p.price + ' MAD</div>' +
+          '<p class="product-desc">' + p.description + '</p>' +
+          '<div style="display:flex;flex-direction:column;gap:12px">' +
+            '<button class="btn btn-primary btn-lg" onclick="addToCart(' + JSON.stringify(p).replace(/"/g, '&quot;') + ')" ' + (!p.inStock ? 'disabled' : '') + '>' + icons.bag + ' ' + (p.inStock ? 'Ajouter au panier' : 'Rupture de stock') + '</button>' +
+            '<p style="font-size:0.78rem;color:var(--muted);text-align:center">💰 Paiement à la livraison — Espèces ou carte</p>' +
+          '</div>' +
+          '<div class="product-info-box">' +
+            '<div>💎 Matière : Plaqué or 18 carats</div>' +
+            '<div>✨ Perles nacrées authentiques</div>' +
+            '<div>📦 Emballage cadeau inclus</div>' +
+            '<div>🚚 Livraison dans tout le Maroc</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+// ===== CART =====
+function renderCart(main) {
+  const cart = getCart();
+  if (!cart.length) {
+    main.innerHTML = '<div class="empty-state"><div style="font-size:4rem">🛍️</div><h2>Votre panier est vide</h2><p>Découvrez nos bijoux et accessoires</p><button class="btn btn-primary" onclick="navigate(\'/boutique\')">Voir la boutique</button></div>';
+    return;
+  }
+  main.innerHTML =
+    '<div class="container" style="padding-top:40px;padding-bottom:60px;max-width:820px">' +
+      '<h1 style="font-family:var(--font-head);font-size:2.2rem;font-weight:400;margin-bottom:28px">Mon Panier</h1>' +
+      '<div id="cart-items"></div>' +
+      '<div class="cart-summary">' +
+        '<div class="cart-total"><span class="cart-total-label">Total</span><span class="cart-total-amount" id="cart-total">' + getCartTotal() + ' MAD</span></div>' +
+        '<button class="btn btn-primary btn-lg" style="width:100%" onclick="navigate(\'/commander\')">Passer la commande ' + icons.arrowRight + '</button>' +
+        '<p style="font-size:0.78rem;color:var(--muted);text-align:center;margin-top:10px">💰 Paiement à la livraison — Espèces ou carte</p>' +
+      '</div>' +
+    '</div>';
   renderCartItems();
 }
 function renderCartItems() {
-  var container = document.getElementById('cart-items'); if (!container) return;
-  container.innerHTML = getCart().map(function(item){
-    return '<div class="cart-item"><div class="cart-item-img"><img src="' + item.image + '" alt="' + item.name + '"></div><div class="cart-item-info"><div class="cart-item-name">' + item.name + '</div><div class="cart-item-price">' + item.price + ' MAD</div></div><div class="qty-control"><button class="qty-btn" onclick="changeQty(\'' + item.id + '\',' + (item.quantity-1) + ')" aria-label="Diminuer">−</button><span class="qty-val">' + item.quantity + '</span><button class="qty-btn" onclick="changeQty(\'' + item.id + '\',' + (item.quantity+1) + ')" aria-label="Augmenter">+</button></div><button class="remove-btn" onclick="removeItem(\'' + item.id + '\')" aria-label="Supprimer">' + icons.trash + '</button></div>';
-  }).join('');
-  var tel = document.getElementById('cart-total'); if (tel) tel.textContent = getCartTotal() + ' MAD';
+  const container = document.getElementById('cart-items'); if (!container) return;
+  container.innerHTML = getCart().map(item =>
+    '<div class="cart-item">' +
+      '<div class="cart-item-img"><img src="' + item.image + '" alt="' + item.name + '"></div>' +
+      '<div class="cart-item-info"><div class="cart-item-name">' + item.name + '</div><div class="cart-item-price">' + item.price + ' MAD</div></div>' +
+      '<div class="qty-control">' +
+        '<button class="qty-btn" onclick="changeQty(\'' + item.id + '\',' + (item.quantity - 1) + ')">−</button>' +
+        '<span class="qty-val">' + item.quantity + '</span>' +
+        '<button class="qty-btn" onclick="changeQty(\'' + item.id + '\',' + (item.quantity + 1) + ')">+</button>' +
+      '</div>' +
+      '<button class="remove-btn" onclick="removeItem(\'' + item.id + '\')">' + icons.trash + '</button>' +
+    '</div>'
+  ).join('');
+  const tel = document.getElementById('cart-total'); if (tel) tel.textContent = getCartTotal() + ' MAD';
 }
-function changeQty(id, qty) { updateQty(id,qty); renderCartItems(); if (!getCart().length) renderCart(document.getElementById('main-content')); }
+function changeQty(id, qty) { updateQty(id, qty); renderCartItems(); if (!getCart().length) renderCart(document.getElementById('main-content')); }
 function removeItem(id)     { removeFromCart(id); renderCartItems(); if (!getCart().length) renderCart(document.getElementById('main-content')); }
 
-// ===== PAGE COMMANDE =====
+// ===== CHECKOUT =====
 function renderCheckout(main) {
-  if (!getCart().length) { main.innerHTML='<div class="empty-state"><h2>Panier vide</h2><button class="btn btn-primary" onclick="navigate(\'/boutique\')">Voir la boutique</button></div>'; return; }
-  var cart = getCart();
-  main.innerHTML = '<div class="container" style="padding-top:40px;padding-bottom:60px;max-width:900px">' +
-    '<h1 style="font-family:var(--font-heading);font-size:2rem;font-weight:300;margin-bottom:36px">Passer la commande</h1>' +
-    '<div class="checkout-grid">' +
-      '<div>' +
-        '<div class="form-group"><label for="co-name">Nom complet *</label><input type="text" id="co-name" placeholder="Votre nom complet" required></div>' +
-        '<div class="form-group"><label for="co-phone">Téléphone *</label><input type="tel" id="co-phone" placeholder="06 XX XX XX XX" required></div>' +
-        '<div class="form-group"><label for="co-address">Adresse complète *</label><textarea id="co-address" placeholder="Rue, immeuble, étage..." required></textarea></div>' +
-        '<div class="form-group"><label for="co-city">Ville *</label><input type="text" id="co-city" placeholder="Votre ville" required></div>' +
-        '<div class="form-group"><label for="co-notes">Notes (optionnel)</label><textarea id="co-notes" placeholder="Instructions spéciales..."></textarea></div>' +
-        '<div class="payment-box"><strong>💰 Mode de paiement</strong><span style="color:var(--muted);font-size:0.875rem">' + t('payment_info') + '</span></div>' +
-        '<button class="btn btn-primary btn-lg" style="width:100%" id="submit-btn" onclick="submitOrder()">Confirmer la commande</button>' +
+  if (!getCart().length) {
+    main.innerHTML = '<div class="empty-state"><h2>Panier vide</h2><button class="btn btn-primary" onclick="navigate(\'/boutique\')">Voir la boutique</button></div>';
+    return;
+  }
+  const cart = getCart();
+  main.innerHTML =
+    '<div class="container" style="padding-top:40px;padding-bottom:60px;max-width:960px">' +
+      '<h1 style="font-family:var(--font-head);font-size:2.2rem;font-weight:400;margin-bottom:36px">Passer la commande</h1>' +
+      (firebaseReady ? '<div class="sync-badge">' + icons.cloud + ' Commande synchronisée sur tous vos appareils</div><br>' : '') +
+      '<div class="checkout-grid">' +
+        '<div>' +
+          '<div class="form-group"><label>Nom complet *</label><input type="text" id="co-name" placeholder="Votre nom complet"></div>' +
+          '<div class="form-group"><label>Téléphone *</label><input type="tel" id="co-phone" placeholder="06 XX XX XX XX"></div>' +
+          '<div class="form-group"><label>Adresse complète *</label><textarea id="co-address" placeholder="Rue, quartier, immeuble..."></textarea></div>' +
+          '<div class="form-group"><label>Ville *</label><input type="text" id="co-city" placeholder="Votre ville"></div>' +
+          '<div class="form-group"><label>Notes (optionnel)</label><textarea id="co-notes" placeholder="Instructions spéciales..."></textarea></div>' +
+          '<div class="payment-box"><strong>💰 Paiement à la livraison</strong><span style="font-size:0.85rem;color:var(--text-mid)">Vous payez à la réception de votre commande. Espèces ou carte bancaire acceptées.</span></div>' +
+          '<button class="btn btn-primary btn-lg" style="width:100%" onclick="submitOrder()" id="order-btn">Confirmer la commande ' + icons.arrowRight + '</button>' +
+        '</div>' +
+        '<div><div class="order-summary-box"><h3>Résumé</h3>' +
+          cart.map(item => '<div class="summary-item"><span>' + item.name + ' × ' + item.quantity + '</span><span>' + (item.price * item.quantity) + ' MAD</span></div>').join('') +
+          '<div class="summary-total"><span>Total</span><span>' + getCartTotal() + ' MAD</span></div></div></div>' +
       '</div>' +
-      '<div><div class="order-summary-box"><h3>Résumé</h3>' + cart.map(function(item){ return '<div class="summary-item"><span>'+item.name+' × '+item.quantity+'</span><span>'+(item.price*item.quantity)+' MAD</span></div>'; }).join('') + '<div class="summary-total"><span>Total</span><span>' + getCartTotal() + ' MAD</span></div></div></div>' +
+    '</div>';
+}
+
+async function submitOrder() {
+  const name    = document.getElementById('co-name')?.value.trim();
+  const phone   = document.getElementById('co-phone')?.value.trim();
+  const address = document.getElementById('co-address')?.value.trim();
+  const city    = document.getElementById('co-city')?.value.trim();
+  const notes   = document.getElementById('co-notes')?.value.trim();
+
+  if (!name || !phone || !address || !city) {
+    showToast('Veuillez remplir tous les champs obligatoires', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('order-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours...'; }
+
+  await saveOrderCloud({
+    customerName: name,
+    customerPhone: phone,
+    customerAddress: address,
+    customerCity: city,
+    notes: notes,
+    items: getCart(),
+    total: getCartTotal()
+  });
+
+  clearCart();
+
+  document.getElementById('main-content').innerHTML =
+    '<div class="success-page">' +
+      '<div class="success-icon">' + icons.check + '</div>' +
+      '<h1 style="font-family:var(--font-head);font-size:2.5rem;font-weight:300;margin-bottom:14px">Commande confirmée ! ✨</h1>' +
+      '<p style="color:var(--muted);margin-bottom:8px">Merci pour votre commande. Nous vous contacterons très prochainement.</p>' +
+      '<p style="font-size:0.875rem;color:var(--muted);margin-bottom:36px">💰 Paiement à la livraison — Espèces ou carte</p>' +
+      '<button class="btn btn-primary btn-lg" onclick="navigate(\'/\')">Retour à l\'accueil</button>' +
+    '</div>';
+}
+
+// ===== HOW TO ORDER =====
+function renderHowToOrder(main) {
+  main.innerHTML = '<div class="container" style="padding-top:40px;padding-bottom:60px;max-width:720px">' +
+    '<div class="page-header"><h1>Comment commander</h1><p>Simple, rapide et sécurisé</p></div>' +
+    '<div class="steps-v">' +
+    [
+      ['1','Parcourez la boutique','Explorez notre collection de bijoux et trouvez vos coups de cœur.'],
+      ['2','Ajoutez au panier','Cliquez sur le produit puis sur « Ajouter au panier ».'],
+      ['3','Remplissez le formulaire','Indiquez votre nom, téléphone et adresse de livraison.'],
+      ['4','Confirmez la commande','Nous vous contacterons par téléphone pour confirmer.'],
+      ['5','Payez à la livraison','Payez en espèces ou par carte à la réception de votre colis.'],
+    ].map(s => '<div class="step-v"><div class="step-v-num">' + s[0] + '</div><div><h3>' + s[1] + '</h3><p>' + s[2] + '</p></div></div>').join('') +
     '</div></div>';
 }
 
-// submitOrder — async : utilise dbSaveOrder de db.js (stockage partagé)
-async function submitOrder() {
-  var name    = document.getElementById('co-name')?.value.trim();
-  var phone   = document.getElementById('co-phone')?.value.trim();
-  var address = document.getElementById('co-address')?.value.trim();
-  var city    = document.getElementById('co-city')?.value.trim();
-  var notes   = document.getElementById('co-notes')?.value.trim();
-  if (!name || !phone || !address || !city) { showToast('Veuillez remplir tous les champs obligatoires', 'error'); return; }
-  var btn = document.getElementById('submit-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours…'; }
-  try {
-    await dbSaveOrder({ customerName:name, customerPhone:phone, customerAddress:address, customerCity:city, notes:notes, items:getCart(), total:getCartTotal() });
-    clearCart();
-    document.getElementById('main-content').innerHTML =
-      '<div class="success-page">' +
-        '<div class="success-icon">' + icons.check + '</div>' +
-        '<h1 style="font-family:var(--font-heading);font-size:2.5rem;font-weight:300;margin-bottom:14px">Commande confirmée !</h1>' +
-        '<p style="color:var(--muted);margin-bottom:8px">Merci pour votre commande. Nous vous contacterons bientôt pour confirmer la livraison.</p>' +
-        '<p style="font-size:0.875rem;color:var(--muted);margin-bottom:36px">' + t('payment_info') + '</p>' +
-        '<button class="btn btn-primary btn-lg" onclick="navigate(\'/\')">' + t('back_home') + '</button>' +
-      '</div>';
-  } catch(e) {
-    showToast('Erreur lors de la commande. Veuillez réessayer.', 'error');
-    if (btn) { btn.disabled = false; btn.textContent = 'Confirmer la commande'; }
-  }
-}
-
-// ===== AUTRES PAGES =====
-function renderHowToOrder(main) {
-  main.innerHTML = '<div class="container" style="padding-top:40px;padding-bottom:60px;max-width:720px"><div class="page-header"><h1>Comment commander</h1><p>Simple, rapide et sécurisé</p></div><div class="steps-v">' +
-    [['1','Parcourez la boutique','Explorez notre collection et découvrez nos pièces artisanales en gypse.'],
-     ['2','Ajoutez au panier','Cliquez sur "Ajouter au panier" pour les articles qui vous plaisent.'],
-     ['3','Remplissez le formulaire','Indiquez votre nom, téléphone et adresse de livraison.'],
-     ['4','Confirmez la commande','Nous vous contacterons par téléphone pour confirmer les détails.'],
-     ['5','Payez à la livraison','Payez en espèces ou par carte à la réception.']
-    ].map(function(s){ return '<div class="step-v"><div class="step-v-num">'+s[0]+'</div><div><h3>'+s[1]+'</h3><p>'+s[2]+'</p></div></div>'; }).join('') + '</div></div>';
-}
-
+// ===== DELIVERY =====
 function renderDelivery(main) {
-  main.innerHTML = '<div class="container" style="padding-top:40px;padding-bottom:60px;max-width:720px"><div class="page-header"><h1>Livraison</h1><p>Livraison dans tout le Maroc</p></div><div>' +
-    [[icons.pkg,'Emballage soigné','Nos produits en gypse sont fragiles. Chaque pièce est emballée avec le plus grand soin.'],
-     [icons.clock,'Délais de livraison','Livraison sous 3 à 7 jours ouvrables. Nous vous contacterons pour confirmer la date.'],
-     [icons.shield,'Paiement à la livraison','Payez uniquement à la réception. Espèces et carte bancaire acceptées.'],
-     [icons.alert,'Politique de retour','Retours acceptés uniquement en cas de casse constatée à la livraison.']
-    ].map(function(c){ return '<div class="info-card"><div class="info-card-icon">'+c[0]+'</div><div><h3>'+c[1]+'</h3><p>'+c[2]+'</p></div></div>'; }).join('') + '</div></div>';
+  main.innerHTML = '<div class="container" style="padding-top:40px;padding-bottom:60px;max-width:720px">' +
+    '<div class="page-header"><h1>Livraison</h1><p>Livraison dans tout le Maroc</p></div>' +
+    '<div>' +
+    [
+      [icons.pkg,    'Emballage soigné',        'Chaque bijou est emballé dans un coffret cadeau élégant avec protection maximale.'],
+      [icons.clock,  'Délais de livraison',     'Livraison sous 3 à 5 jours ouvrables partout au Maroc.'],
+      [icons.shield, 'Paiement à la livraison', 'Payez uniquement à la réception. Espèces et carte bancaire acceptées.'],
+      [icons.alert,  'Politique de retour',     'Retours acceptés dans les 48h si le produit est défectueux ou endommagé.'],
+    ].map(c => '<div class="info-card"><div class="info-card-icon">' + c[0] + '</div><div><h3>' + c[1] + '</h3><p>' + c[2] + '</p></div></div>').join('') +
+    '</div></div>';
 }
 
+// ===== CONTACT =====
 function renderContact(main) {
-  main.innerHTML = '<div class="container" style="padding-top:40px;padding-bottom:60px;max-width:860px"><div class="page-header"><h1>Contact</h1><p>Une question ? N\'hésitez pas à nous écrire</p></div><div class="contact-grid"><div><p style="color:var(--muted);margin-bottom:28px;font-size:0.95rem;line-height:1.75">Une question sur nos produits ou votre commande ? Nous vous répondrons rapidement.</p>' +
-    [[icons.phone,'Téléphone','+212 6XX XX XX XX'],[icons.mail,'Email','contact@afraedecor.ma'],[icons.mapPin,'Localisation','Marrakech, Maroc']
-    ].map(function(i){ return '<div class="contact-info-item"><div class="contact-icon">'+i[0]+'</div><div><div class="contact-info-label">'+i[1]+'</div><div class="contact-info-val">'+i[2]+'</div></div></div>'; }).join('') +
-    '</div><div><div class="form-group"><label for="ct-name">Nom</label><input type="text" id="ct-name" placeholder="Votre nom"></div><div class="form-group"><label for="ct-email">Email</label><input type="email" id="ct-email" placeholder="votre@email.com"></div><div class="form-group"><label for="ct-msg">Message</label><textarea id="ct-msg" rows="5" placeholder="Votre message..."></textarea></div><button class="btn btn-primary" style="width:100%" onclick="sendContact()">Envoyer le message</button></div></div></div>';
+  main.innerHTML = '<div class="container" style="padding-top:40px;padding-bottom:60px;max-width:860px">' +
+    '<div class="page-header"><h1>Contact</h1><p>Nous sommes là pour vous</p></div>' +
+    '<div class="contact-grid">' +
+      '<div><p style="color:var(--muted);margin-bottom:28px;font-size:0.95rem;line-height:1.75">Une question sur nos bijoux ou votre commande ? Contactez-nous, nous répondrons rapidement.</p>' +
+      [
+        [icons.phone, 'Téléphone',     '+212 6XX XX XX XX'],
+        [icons.mail,  'Email',         'contact@perlaaccessories.ma'],
+        [icons.pin,   'Localisation',  'Meknes, Maroc'],
+      ].map(i => '<div class="contact-info-item"><div class="contact-icon">' + i[0] + '</div><div><div class="contact-info-label">' + i[1] + '</div><div class="contact-info-val">' + i[2] + '</div></div></div>').join('') +
+      '</div>' +
+      '<div>' +
+        '<div class="form-group"><label>Nom</label><input type="text" id="ct-name" placeholder="Votre nom"></div>' +
+        '<div class="form-group"><label>Email</label><input type="email" id="ct-email" placeholder="votre@email.com"></div>' +
+        '<div class="form-group"><label>Message</label><textarea id="ct-msg" rows="5" placeholder="Votre message..."></textarea></div>' +
+        '<button class="btn btn-primary" style="width:100%" onclick="sendContact()">Envoyer ' + icons.arrowRight + '</button>' +
+      '</div>' +
+    '</div></div>';
 }
 function sendContact() {
-  var name=document.getElementById('ct-name')?.value.trim(), email=document.getElementById('ct-email')?.value.trim(), msg=document.getElementById('ct-msg')?.value.trim();
-  if (!name||!email||!msg) { showToast('Veuillez remplir tous les champs','error'); return; }
-  showToast('Message envoyé ! Nous vous répondrons rapidement.','success');
-  document.getElementById('ct-name').value=''; document.getElementById('ct-email').value=''; document.getElementById('ct-msg').value='';
+  const name  = document.getElementById('ct-name')?.value.trim();
+  const email = document.getElementById('ct-email')?.value.trim();
+  const msg   = document.getElementById('ct-msg')?.value.trim();
+  if (!name || !email || !msg) { showToast('Veuillez remplir tous les champs', 'error'); return; }
+  showToast('✅ Message envoyé ! Merci, nous vous répondrons rapidement.', 'success');
+  document.getElementById('ct-name').value  = '';
+  document.getElementById('ct-email').value = '';
+  document.getElementById('ct-msg').value   = '';
 }
 
+// ===== FAQ =====
 function renderFaq(main) {
-  var faqs = [
-    ["Qu'est-ce que le gypse ?","Le gypse est un matériau naturel utilisé depuis l'antiquité pour créer des objets décoratifs uniques aux formes élégantes."],
-    ["Les produits sont-ils fragiles ?","Oui, le gypse est délicat. Chaque pièce est emballée avec soin. Manipulez les produits avec précaution."],
-    ["Comment puis-je payer ?","Paiement à la livraison uniquement, en espèces ou par carte. Aucun paiement en ligne requis."],
-    ["Quels sont les délais de livraison ?","Livraison sous 3 à 7 jours ouvrables. Nous vous contacterons pour confirmer la date."],
-    ["Puis-je retourner un produit ?","Retours acceptés uniquement en cas de casse constatée à la livraison."],
-    ["Les pièces sont-elles uniques ?","Oui ! Chaque pièce est faite à la main. De légères variations font partie du charme artisanal."],
-    ["Livrez-vous dans tout le Maroc ?","Oui, nous livrons dans toutes les villes du Maroc."],
+  const faqs = [
+    ['Vos bijoux sont-ils en vrai or ?',             'Nos bijoux sont en plaqué or 18 carats de haute qualité, offrant l\'éclat de l\'or à un prix accessible.'],
+    ['Comment entretenir mes bijoux ?',              'Évitez le contact avec l\'eau, les parfums et la sueur. Rangez-les dans leur écrin. Nettoyez avec un chiffon doux.'],
+    ['Comment puis-je payer ?',                      'Paiement à la livraison uniquement — espèces ou carte bancaire.'],
+    ['Quels sont les délais de livraison ?',         '3 à 5 jours ouvrables dans tout le Maroc.'],
+    ['Puis-je retourner un produit ?',               'Oui, dans les 48h si le produit est défectueux ou endommagé à la réception.'],
+    ['Livrez-vous dans tout le Maroc ?',             'Oui, nous livrons dans toutes les villes et régions du Maroc.'],
+    ['Les bijoux conviennent-ils aux allergiques ?', 'Nos bijoux sont hypoallergéniques. Consultez-nous si vous avez des sensibilités particulières.'],
   ];
-  main.innerHTML = '<div class="container" style="padding-top:40px;padding-bottom:60px"><div class="page-header"><h1>Questions Fréquentes</h1><p>Tout ce que vous devez savoir</p></div><div class="faq-list">' +
-    faqs.map(function(f,i){ return '<div class="faq-item"><button class="faq-question" onclick="toggleFaq('+i+')" aria-expanded="false" aria-controls="faq-'+i+'">'+f[0]+'<span class="faq-arrow" aria-hidden="true">▼</span></button><div class="faq-answer" id="faq-'+i+'" role="region">'+f[1]+'</div></div>'; }).join('') + '</div></div>';
+  main.innerHTML = '<div class="container" style="padding-top:40px;padding-bottom:60px"><div class="page-header"><h1>Questions Fréquentes</h1><p>Tout ce que vous devez savoir sur Perla Accessories</p></div><div class="faq-list">' +
+    faqs.map((f, i) =>
+      '<div class="faq-item"><button class="faq-question" onclick="toggleFaq(' + i + ')" aria-expanded="false" aria-controls="faq-' + i + '">' + f[0] + '<span class="faq-arrow">▼</span></button><div class="faq-answer" id="faq-' + i + '">' + f[1] + '</div></div>'
+    ).join('') +
+  '</div></div>';
 }
 function toggleFaq(i) {
-  var answer=document.getElementById('faq-'+i), question=answer?.previousElementSibling, isOpen=answer?.classList.contains('open');
-  document.querySelectorAll('.faq-answer').forEach(function(a){ a.classList.remove('open'); });
-  document.querySelectorAll('.faq-question').forEach(function(q){ q.classList.remove('open'); q.setAttribute('aria-expanded','false'); });
+  const answer   = document.getElementById('faq-' + i);
+  const question = answer?.previousElementSibling;
+  const isOpen   = answer?.classList.contains('open');
+  document.querySelectorAll('.faq-answer').forEach(a => a.classList.remove('open'));
+  document.querySelectorAll('.faq-question').forEach(q => { q.classList.remove('open'); q.setAttribute('aria-expanded','false'); });
   if (!isOpen) { answer?.classList.add('open'); question?.classList.add('open'); question?.setAttribute('aria-expanded','true'); }
 }
 
+// ===== 404 =====
 function renderNotFound(main) {
-  main.innerHTML = '<div class="empty-state"><h1 style="font-size:5rem;font-family:var(--font-heading);color:var(--muted)">404</h1><h2>' + t('page_not_found') + '</h2><p>' + t('page_not_found_text') + '</p><button class="btn btn-primary" onclick="navigate(\'/\')">' + t('back_home') + '</button></div>';
+  main.innerHTML = '<div class="empty-state"><h1 style="font-size:5rem;font-family:var(--font-head);color:var(--muted)">404</h1><h2>Page introuvable</h2><p>La page que vous cherchez n\'existe pas.</p><button class="btn btn-primary" onclick="navigate(\'/\')">Retour à l\'accueil</button></div>';
+}
+
+// ===== FOOTER =====
+function renderFooter() {
+  const footer = document.getElementById('main-footer');
+  if (!footer) return;
+  footer.innerHTML =
+    '<div class="newsletter-section"><div class="container"><div class="newsletter-inner">' +
+      '<div class="newsletter-text"><h3>Newsletter 💌</h3><p>Recevez nos nouveautés et offres exclusives</p></div>' +
+      '<div class="newsletter-form"><div class="nl-input-group"><input type="email" id="nl-footer" placeholder="Votre email..."><button class="btn btn-primary" onclick="handleNewsletterSubmit(\'nl-footer\',\'nl-footer-msg\')">S\'inscrire</button></div><p id="nl-footer-msg" class="nl-msg"></p></div>' +
+    '</div></div></div>' +
+    '<div class="footer-main"><div class="container"><div class="footer-grid">' +
+      '<div class="footer-brand">' +
+        '<h3>Perla Accessories</h3>' +
+        '<p class="arabic-sub">لمسة أناقة</p>' +
+        '<p>Des bijoux d\'exception pour sublimer votre élégance. Plaqué or 18k, perles nacrées et cristaux.</p>' +
+        '<div class="footer-social">' +
+          '<a href="https://instagram.com" target="_blank" class="social-icon" aria-label="Instagram">' + icons.instagram + '</a>' +
+          '<a href="https://facebook.com"  target="_blank" class="social-icon" aria-label="Facebook">'  + icons.facebook  + '</a>' +
+          '<a href="https://tiktok.com"    target="_blank" class="social-icon" aria-label="TikTok">'    + icons.tiktok    + '</a>' +
+          '<a href="https://wa.me/212600000000" target="_blank" class="social-icon" aria-label="WhatsApp">' + icons.whatsapp + '</a>' +
+        '</div>' +
+      '</div>' +
+      '<div class="footer-col">' +
+        '<h4>Navigation</h4>' +
+        '<a href="/boutique"          onclick="event.preventDefault();navigate(\'/boutique\')">Boutique</a>' +
+        '<a href="/comment-commander" onclick="event.preventDefault();navigate(\'/comment-commander\')">Comment commander</a>' +
+        '<a href="/livraison"         onclick="event.preventDefault();navigate(\'/livraison\')">Livraison</a>' +
+        '<a href="/faq"               onclick="event.preventDefault();navigate(\'/faq\')">FAQ</a>' +
+        '<a href="/contact"           onclick="event.preventDefault();navigate(\'/contact\')">Contact</a>' +
+      '</div>' +
+      '<div class="footer-col">' +
+        '<h4>Contact</h4>' +
+        '<div class="footer-contact-item">' + icons.pin   + '<span>Meknes, Maroc</span></div>' +
+        '<div class="footer-contact-item">' + icons.phone + '<a href="tel:+212600000000" style="color:inherit">+212 6XX XX XX XX</a></div>' +
+        '<div class="footer-contact-item">' + icons.mail  + '<a href="mailto:contact@perlaaccessories.ma" style="color:inherit">contact@perlaaccessories.ma</a></div>' +
+        '<div class="footer-payment-badge">💰 Paiement à la livraison<br><small>Espèces ou carte bancaire</small></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="footer-bottom">© ' + new Date().getFullYear() + ' Perla Accessories — لمسة أناقة. Tous droits réservés.</div>' +
+    '</div></div>';
 }
 
 // ===== MOBILE MENU =====
@@ -626,54 +808,38 @@ var mobileOpen = false;
 function toggleMobileMenu() {
   mobileOpen = !mobileOpen;
   document.getElementById('mobile-menu').classList.toggle('open', mobileOpen);
-  var hb = document.getElementById('hamburger-btn');
-  if (hb) { hb.innerHTML = mobileOpen ? icons.x : icons.menu; hb.setAttribute('aria-expanded', mobileOpen); }
+  const hb = document.getElementById('hamburger-btn');
+  if (hb) { hb.innerHTML = mobileOpen ? icons.xIcon : icons.menu; hb.setAttribute('aria-expanded', mobileOpen); }
 }
 function closeMobileMenu() {
   mobileOpen = false;
-  var mm = document.getElementById('mobile-menu'); if (mm) mm.classList.remove('open');
-  var hb = document.getElementById('hamburger-btn'); if (hb) { hb.innerHTML = icons.menu; hb.setAttribute('aria-expanded','false'); }
+  const mm = document.getElementById('mobile-menu'); if (mm) mm.classList.remove('open');
+  const hb = document.getElementById('hamburger-btn'); if (hb) { hb.innerHTML = icons.menu; hb.setAttribute('aria-expanded','false'); }
+}
+
+// ===== NAVBAR SCROLL =====
+function handleNavbarScroll() {
+  const navbar = document.getElementById('navbar');
+  if (navbar) navbar.classList.toggle('scrolled', window.scrollY > 20);
 }
 
 // ===== INIT =====
-document.addEventListener('DOMContentLoaded', function() {
-  // Direction
-  document.documentElement.setAttribute('dir', currentLang === 'ar' ? 'rtl' : 'ltr');
-  document.documentElement.setAttribute('lang', currentLang);
+document.addEventListener('DOMContentLoaded', async () => {
+  // Init Firebase (async, non-bloquant)
+  await initFirebase();
 
-  // Injecter bouton langue
-  var navRight = document.querySelector('.nav-right');
-  if (navRight) {
-    var lw = document.createElement('div'); lw.id = 'lang-wrapper'; lw.innerHTML = renderLangBtn();
-    navRight.insertBefore(lw, navRight.firstChild);
-  }
-
-  // Injecter lien Favoris dans nav
-  var navLinks = document.querySelector('.nav-links');
-  if (navLinks) {
-    var li = document.createElement('li');
-    li.innerHTML = '<a href="/favoris" style="display:flex;align-items:center;gap:6px;position:relative" onclick="event.preventDefault();navigate(\'/favoris\')" aria-label="Mes favoris">' + icons.heart + '<span class="fav-nav-count" aria-hidden="true"></span></a>';
-    navLinks.appendChild(li);
-  }
-
-  // Injecter Favoris dans mobile menu
-  var mm = document.getElementById('mobile-menu');
-  if (mm) {
-    var a = document.createElement('a'); a.href = '/favoris';
-    a.innerHTML = '❤️ Mes Favoris <span class="fav-nav-count"></span>';
-    a.addEventListener('click', function(e){ e.preventDefault(); navigate('/favoris'); });
-    mm.appendChild(a);
-  }
-
-  updateCartUI(); updateFavBadge();
+  updateCartUI();
+  updateFavBadge();
   render(window.location.pathname);
   updateActiveNav(window.location.pathname);
   renderFooter();
 
-  // Intercepter liens internes
-  document.addEventListener('click', function(e) {
-    var a = e.target.closest('a[href]'); if (!a) return;
-    var href = a.getAttribute('href');
+  window.addEventListener('scroll', handleNavbarScroll, { passive: true });
+
+  document.addEventListener('click', e => {
+    const a = e.target.closest('a[href]');
+    if (!a) return;
+    const href = a.getAttribute('href');
     if (href && href.startsWith('/') && !href.startsWith('//')) { e.preventDefault(); navigate(href); }
   });
 });

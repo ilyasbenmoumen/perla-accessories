@@ -3,168 +3,138 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Administration — Afrae Décor</title>
+  <title>Admin — Perla Accessories</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="admin.css">
+  <link rel="icon" type="image/png" href="/assets/logo.png">
 </head>
 <body>
 
-<!-- ÉCRAN DE CONNEXION -->
-<div id="login-screen" class="login-wrap">
-  <div class="login-card">
-    <div class="login-logo">Afrae Décor</div>
-    <h1>Administration</h1>
-    <p>Accès réservé aux gestionnaires</p>
-    <input type="password" id="pwd-input" placeholder="Mot de passe" autocomplete="current-password"
-           onkeydown="if(event.key==='Enter') doLogin()">
-    <button onclick="doLogin()">Se connecter</button>
-    <p id="login-err" class="login-err" aria-live="polite"></p>
+<!-- LOGIN -->
+<div id="login-screen" class="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <img src="/assets/logo.png" alt="Perla Accessories">
+    </div>
+    <h1>Perla Admin</h1>
+    <p class="login-sub">لمسة أناقة — Panneau d'administration</p>
+    <div class="form-group">
+      <label>Mot de passe</label>
+      <input type="password" id="admin-password" placeholder="••••••••" onkeydown="if(event.key==='Enter') login()">
+    </div>
+    <button class="btn btn-primary" onclick="login()" style="width:100%">Se connecter</button>
+    <p id="login-error" class="login-error"></p>
   </div>
 </div>
 
-<!-- APPLICATION ADMIN -->
-<div id="admin-app" style="display:none">
-
-  <!-- SIDEBAR -->
+<!-- ADMIN PANEL -->
+<div id="admin-panel" style="display:none">
+  <!-- Sidebar -->
   <aside class="sidebar">
-    <div class="sidebar-brand">
-      Afrae Décor
-      <span>Administration</span>
+    <div class="sidebar-header">
+      <img src="/assets/logo.png" alt="Perla" class="sidebar-logo">
+      <div>
+        <div class="sidebar-brand">Perla Admin</div>
+        <div class="sidebar-sub">لمسة أناقة</div>
+      </div>
     </div>
     <nav class="sidebar-nav">
-      <a href="#" class="nav-item active" id="nav-orders"     onclick="showTab('orders',this)">
-        <span class="nav-icon">📦</span> Commandes
-        <span class="badge-count" id="pending-count" style="display:none"></span>
+      <a class="nav-item active" onclick="showTab('orders')" id="tab-orders">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Commandes <span class="badge" id="orders-badge"></span>
       </a>
-      <a href="#" class="nav-item" id="nav-newsletter" onclick="showTab('newsletter',this)">
-        <span class="nav-icon">✉️</span> Newsletter
+      <a class="nav-item" onclick="showTab('products')" id="tab-products">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+        Produits
       </a>
-      <a href="#" class="nav-item" id="nav-export"     onclick="showTab('export',this)">
-        <span class="nav-icon">⬇️</span> Export
+      <a class="nav-item" onclick="showTab('stats')" id="tab-stats">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Statistiques
       </a>
     </nav>
     <div class="sidebar-footer">
-      <button class="btn-refresh" id="refresh-btn" onclick="loadAll()">↻ Actualiser</button>
-      <div id="last-refresh" class="last-refresh"></div>
-      <a href="/" class="btn-site">← Voir le site</a>
+      <div class="sync-status" id="sync-status">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg>
+        <span>Vérification...</span>
+      </div>
+      <button class="btn-logout" onclick="logout()">Déconnexion</button>
     </div>
   </aside>
 
-  <!-- CONTENU PRINCIPAL -->
+  <!-- Main content -->
   <main class="admin-main">
-
-    <!-- STATISTIQUES -->
-    <div class="stats-bar">
-      <div class="stat-card">
-        <div class="stat-num" id="s-total">—</div>
-        <div class="stat-label">Total commandes</div>
+    <!-- ORDERS TAB -->
+    <div id="section-orders" class="section-tab active">
+      <div class="section-header">
+        <div>
+          <h2>Commandes</h2>
+          <p class="section-sub">Toutes les commandes — synchronisées en temps réel</p>
+        </div>
+        <div class="header-actions">
+          <select id="status-filter" onchange="filterOrders(this.value)" class="filter-select">
+            <option value="">Toutes</option>
+            <option value="en_attente">En attente</option>
+            <option value="confirmee">Confirmée</option>
+            <option value="en_livraison">En livraison</option>
+            <option value="livree">Livrée</option>
+            <option value="annulee">Annulée</option>
+          </select>
+          <button class="btn-refresh" onclick="loadOrders()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+            Actualiser
+          </button>
+        </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-num orange" id="s-pending">—</div>
-        <div class="stat-label">En attente</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num blue" id="s-confirmed">—</div>
-        <div class="stat-label">Confirmées</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num green" id="s-delivered">—</div>
-        <div class="stat-label">Livrées</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num primary" id="s-revenue">—</div>
-        <div class="stat-label">CA livré (MAD)</div>
+      <div id="orders-container">
+        <div class="loading">
+          <div class="spinner"></div>
+          <span>Chargement des commandes...</span>
+        </div>
       </div>
     </div>
 
-    <!-- ONGLET COMMANDES -->
-    <section class="tab-section active" id="tab-orders">
+    <!-- PRODUCTS TAB -->
+    <div id="section-products" class="section-tab" style="display:none">
       <div class="section-header">
-        <h2>Commandes
-          <span id="orders-count" class="count-badge"></span>
-        </h2>
-        <div class="filter-pills">
-          <button class="pill active" onclick="filterOrders('all',this)">Toutes</button>
-          <button class="pill" onclick="filterOrders('en_attente',this)">⏳ En attente</button>
-          <button class="pill" onclick="filterOrders('confirmee',this)">✅ Confirmées</button>
-          <button class="pill" onclick="filterOrders('livree',this)">🚚 Livrées</button>
-          <button class="pill" onclick="filterOrders('annulee',this)">❌ Annulées</button>
+        <div>
+          <h2>Produits</h2>
+          <p class="section-sub">Gérer le catalogue de bijoux</p>
+        </div>
+        <button class="btn btn-primary" onclick="openAddProduct()">+ Ajouter un produit</button>
+      </div>
+      <div id="products-container"></div>
+    </div>
+
+    <!-- STATS TAB -->
+    <div id="section-stats" class="section-tab" style="display:none">
+      <div class="section-header">
+        <div>
+          <h2>Statistiques</h2>
+          <p class="section-sub">Vue d'ensemble de votre boutique</p>
         </div>
       </div>
-      <div class="table-wrap">
-        <table class="data-table" id="orders-table">
-          <thead>
-            <tr>
-              <th>#ID</th>
-              <th>Client</th>
-              <th>Téléphone</th>
-              <th>Ville</th>
-              <th>Articles</th>
-              <th>Total</th>
-              <th>Statut</th>
-              <th>Date</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="orders-tbody">
-            <tr><td colspan="9" class="empty-cell">Chargement…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- ONGLET NEWSLETTER -->
-    <section class="tab-section" id="tab-newsletter">
-      <div class="section-header">
-        <h2>Abonnés Newsletter</h2>
-      </div>
-      <div id="nl-content" class="nl-box">Chargement…</div>
-    </section>
-
-    <!-- ONGLET EXPORT -->
-    <section class="tab-section" id="tab-export">
-      <div class="section-header"><h2>Export des données</h2></div>
-      <div class="export-grid">
-        <button class="export-card" onclick="exportCSV()">
-          <span class="export-icon">📊</span>
-          <strong>Commandes CSV</strong>
-          <span>Compatible Excel / Google Sheets</span>
-        </button>
-        <button class="export-card" onclick="exportJSON()">
-          <span class="export-icon">📄</span>
-          <strong>Commandes JSON</strong>
-          <span>Format brut pour développeurs</span>
-        </button>
-        <button class="export-card" onclick="exportNL()">
-          <span class="export-icon">✉️</span>
-          <strong>Emails Newsletter</strong>
-          <span>Liste des abonnés (.txt)</span>
-        </button>
-      </div>
-      <div class="danger-zone">
-        <h3>⚠️ Zone dangereuse</h3>
-        <p>Ces actions sont irréversibles. Procédez avec précaution.</p>
-        <button class="btn btn-danger" onclick="confirmClearOrders()">🗑️ Effacer toutes les commandes</button>
-      </div>
-    </section>
-
+      <div id="stats-container"></div>
+    </div>
   </main>
 </div>
 
-<!-- MODAL DÉTAIL COMMANDE -->
-<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+<!-- ORDER DETAIL MODAL -->
+<div id="order-modal" class="modal-overlay" onclick="closeModal(event)" style="display:none">
   <div class="modal-box">
-    <div class="modal-header">
-      <h3 id="modal-title">Détail commande</h3>
-      <button class="modal-close" onclick="closeModal()" aria-label="Fermer">✕</button>
-    </div>
-    <div id="modal-body" class="modal-body"></div>
+    <button class="modal-close" onclick="document.getElementById('order-modal').style.display='none'">✕</button>
+    <div id="modal-content"></div>
   </div>
 </div>
 
-<!-- TOAST -->
-<div class="toast-bar" id="toast-bar" role="status" aria-live="polite"></div>
+<!-- ADD/EDIT PRODUCT MODAL -->
+<div id="product-modal" class="modal-overlay" onclick="closeProductModal(event)" style="display:none">
+  <div class="modal-box">
+    <button class="modal-close" onclick="document.getElementById('product-modal').style.display='none'">✕</button>
+    <div id="product-modal-content"></div>
+  </div>
+</div>
 
-<script src="../js/db.js"></script>
 <script src="admin.js"></script>
 </body>
 </html>
